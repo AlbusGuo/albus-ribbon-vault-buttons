@@ -1,3 +1,4 @@
+// main.js
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -310,6 +311,36 @@ var BasicVaultButtonPlugin = class extends import_obsidian.Plugin {
         line-height: 1.3;
       }
       
+      .command-search-container {
+        position: relative;
+      }
+      
+      .command-search-button {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: var(--interactive-accent);
+        color: var(--text-on-accent);
+        border: none;
+        border-radius: 4px;
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 11px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .command-search-button:hover {
+        background: var(--interactive-accent-hover);
+      }
+      
+      .command-search-input {
+        padding-right: 70px !important;
+      }
+      
       @media (max-width: 768px) {
         .basic-vault-button-setting-row {
           grid-template-columns: 1fr;
@@ -359,6 +390,33 @@ var FileSuggestModal = class extends import_obsidian.FuzzySuggestModal {
 
   onChooseItem(file, evt) {
     this.onChoose(file);
+  }
+};
+
+var CommandSuggestModal = class extends import_obsidian.FuzzySuggestModal {
+  constructor(app, onChoose) {
+    super(app);
+    this.onChoose = onChoose;
+  }
+
+  getItems() {
+    const commands = this.app.commands.commands;
+    const matchedCommands = [];
+    
+    for (const key in commands) {
+      const element = commands[key];
+      matchedCommands.push(element);
+    }
+    
+    return matchedCommands;
+  }
+
+  getItemText(command) {
+    return command.name;
+  }
+
+  onChooseItem(command, evt) {
+    this.onChoose(command);
   }
 };
 
@@ -501,7 +559,7 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
 
     new import_obsidian.Setting(content)
       .setName('图标')
-      .setDesc('输入 Lucide 图标名称（如：lucide-home）')
+      .setDesc('输入 Lucide 图标名称')
       .addText(text => text
         .setValue(button.icon)
         .setPlaceholder('lucide-home')
@@ -526,16 +584,44 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
         }));
 
     if (button.type === 'command') {
-      new import_obsidian.Setting(content)
+      const commandSetting = new import_obsidian.Setting(content)
         .setName('命令ID')
-        .setDesc('输入要执行的命令ID（可在"命令面板"中查看命令ID）')
-        .addText(text => text
-          .setValue(button.command)
-          .setPlaceholder('file-explorer:new-file')
-          .onChange(async (value) => {
-            button.command = value;
-            await this.plugin.saveSettings();
-          }));
+        .setDesc('输入要执行的命令ID');
+
+      // 创建搜索容器
+      const searchContainer = commandSetting.controlEl.createDiv('command-search-container');
+      
+      // 创建输入框
+      const textInput = searchContainer.createEl('input', {
+        type: 'text',
+        cls: 'command-search-input'
+      });
+      textInput.value = button.command || '';
+      textInput.placeholder = '例如：file-explorer:new-file';
+      textInput.style.width = '100%';
+      
+      // 创建搜索按钮
+      const searchButton = searchContainer.createEl('button', {
+        text: '选择命令',
+        cls: 'command-search-button'
+      });
+      
+      // 设置输入框变化事件
+      textInput.addEventListener('input', async (e) => {
+        button.command = textInput.value;
+        await this.plugin.saveSettings();
+      });
+      
+      // 设置搜索按钮点击事件
+      searchButton.addEventListener('click', () => {
+        const modal = new CommandSuggestModal(this.app, (command) => {
+          button.command = command.id;
+          textInput.value = command.id;
+          this.plugin.saveSettings();
+        });
+        modal.open();
+      });
+      
     } else if (button.type === 'file') {
       new import_obsidian.Setting(content)
         .setName('目标文件')
@@ -573,4 +659,3 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
     }
   }
 };
-
