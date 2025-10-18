@@ -58,17 +58,13 @@ var BasicVaultButtonPlugin = class extends import_obsidian.Plugin {
   }
 
   initVaultButtons() {
-    // 清空所有现有的按钮
     this.ribbonMap.forEach((value, key) => {
       value.detach();
     });
     this.ribbonMap.clear();
 
-    // 重新创建所有按钮，确保正确的顺序
-    // 先创建自定义按钮（从下到上）
     this.initCustomButtons();
-    
-    // 然后创建内置按钮（从上到下）- 反序排列
+
     this.createRibbonButton("theme", "切换主题", "lucide-sun-moon", () => this.switchLightDark());
     this.createRibbonButton("vault", "切换库", "vault", () => this.app.openVaultChooser());
     this.createRibbonButton("help", "帮助", "help", () => this.app.openHelp());
@@ -76,7 +72,6 @@ var BasicVaultButtonPlugin = class extends import_obsidian.Plugin {
   }
 
   initCustomButtons() {
-    // 按顺序创建自定义按钮（从下到上）
     this.customButtons.forEach((button, index) => {
       this.createCustomButton(button, index);
     });
@@ -156,7 +151,6 @@ var BasicVaultButtonPlugin = class extends import_obsidian.Plugin {
 
   applyCustomStyles() {
     const customStyles = `
-      /* 自定义按钮设置样式 - 紧凑版本 */
       .basic-vault-button-setting-item {
         background: var(--background-secondary);
         border-radius: 8px;
@@ -294,7 +288,6 @@ var BasicVaultButtonPlugin = class extends import_obsidian.Plugin {
         margin-bottom: 16px;
       }
       
-      /* 设置项样式优化 */
       .basic-vault-button-setting-item .setting-item {
         border-top: none;
         padding-top: 0;
@@ -317,7 +310,6 @@ var BasicVaultButtonPlugin = class extends import_obsidian.Plugin {
         line-height: 1.3;
       }
       
-      /* 响应式设计 */
       @media (max-width: 768px) {
         .basic-vault-button-setting-row {
           grid-template-columns: 1fr;
@@ -351,7 +343,6 @@ var BasicVaultButtonPlugin = class extends import_obsidian.Plugin {
   }
 };
 
-// 文件选择模态框
 var FileSuggestModal = class extends import_obsidian.FuzzySuggestModal {
   constructor(app, onChoose) {
     super(app);
@@ -371,7 +362,6 @@ var FileSuggestModal = class extends import_obsidian.FuzzySuggestModal {
   }
 };
 
-// 自定义按钮设置选项卡
 var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -382,13 +372,11 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // 标题区域
     containerEl.createEl('h2', { text: '自定义底部侧边栏按钮' });
     
     const description = containerEl.createDiv('basic-vault-button-description');
     description.setText('在此添加和管理您的底部侧边栏按钮。新按钮将从下到上添加到侧边栏中，位于内置按钮下方。');
 
-    // 空状态
     if (this.plugin.customButtons.length === 0) {
       const emptyState = containerEl.createDiv('basic-vault-button-empty');
       emptyState.createEl('p', { text: '还没有添加任何自定义按钮' });
@@ -398,25 +386,21 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
       });
     }
 
-    // 如果有按钮，显示按钮列表
     if (this.plugin.customButtons.length > 0) {
-      // 分割线
+
       containerEl.createDiv('basic-vault-button-divider');
 
-      // 按钮列表标题
       const listTitle = containerEl.createDiv('basic-vault-button-section-title');
       listTitle.setText('已配置的按钮');
 
-      // 按钮列表（从下到上显示，所以反转数组）
       const reversedButtons = [...this.plugin.customButtons].reverse();
       reversedButtons.forEach((button, reversedIndex) => {
-        // 计算原始索引
+
         const originalIndex = this.plugin.customButtons.length - 1 - reversedIndex;
         this.createButtonSetting(containerEl, button, originalIndex);
       });
     }
 
-    // 添加按钮现在放在最后（按钮列表下方）
     const addButton = containerEl.createEl('button', {
       text: '添加新按钮',
       cls: 'basic-vault-button-add-btn'
@@ -435,24 +419,23 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
       file: '',
       url: ''
     };
-    this.plugin.customButtons.unshift(newButton); // 添加到开头，这样会显示在底部
+    this.plugin.customButtons.unshift(newButton);
     this.plugin.saveSettings();
-    this.plugin.initVaultButtons(); // 重新初始化所有按钮
+    this.plugin.initVaultButtons();
     this.display();
   }
 
   removeButton(index) {
-    // 移除按钮
+
     const buttonId = `custom-${index}`;
     if (this.plugin.ribbonMap.has(buttonId)) {
       this.plugin.ribbonMap.get(buttonId).detach();
       this.plugin.ribbonMap.delete(buttonId);
     }
     
-    // 从数组中移除
     this.plugin.customButtons.splice(index, 1);
     this.plugin.saveSettings();
-    this.plugin.initVaultButtons(); // 重新初始化所有按钮
+    this.plugin.initVaultButtons();
     this.display();
   }
 
@@ -465,14 +448,13 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
       [this.plugin.customButtons[index], this.plugin.customButtons[index + 1]];
     }
     this.plugin.saveSettings();
-    this.plugin.initVaultButtons(); // 重新初始化所有按钮
+    this.plugin.initVaultButtons();
     this.display();
   }
 
   createButtonSetting(containerEl, button, index) {
     const settingItem = containerEl.createDiv('basic-vault-button-setting-item');
 
-    // 头部 - 标题和操作按钮
     const header = settingItem.createDiv('basic-vault-button-setting-header');
     header.createEl('span', {
       text: `按钮 ${index + 1}`,
@@ -481,7 +463,6 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
 
     const actions = header.createDiv('basic-vault-button-setting-actions');
     
-    // 上移按钮
     const upButton = actions.createEl('button', {
       text: '↑',
       cls: 'basic-vault-button-action-btn'
@@ -490,7 +471,6 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
     upButton.disabled = index === 0;
     upButton.addEventListener('click', () => this.moveButton(index, 'up'));
 
-    // 下移按钮
     const downButton = actions.createEl('button', {
       text: '↓',
       cls: 'basic-vault-button-action-btn'
@@ -499,17 +479,14 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
     downButton.disabled = index === this.plugin.customButtons.length - 1;
     downButton.addEventListener('click', () => this.moveButton(index, 'down'));
 
-    // 删除按钮
     const deleteButton = actions.createEl('button', {
       text: '删除',
       cls: 'basic-vault-button-action-btn basic-vault-button-delete-btn'
     });
     deleteButton.addEventListener('click', () => this.removeButton(index));
 
-    // 内容区域
     const content = settingItem.createDiv('basic-vault-button-setting-content');
 
-    // 按钮名称
     new import_obsidian.Setting(content)
       .setName('按钮名称')
       .setDesc('鼠标悬停时显示的提示文字')
@@ -522,7 +499,6 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
           this.plugin.initVaultButtons();
         }));
 
-    // 图标设置
     new import_obsidian.Setting(content)
       .setName('图标')
       .setDesc('输入 Lucide 图标名称（如：lucide-home）')
@@ -535,7 +511,6 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
           this.plugin.initVaultButtons();
         }));
 
-    // 按钮类型
     new import_obsidian.Setting(content)
       .setName('按钮类型')
       .setDesc('选择按钮点击时执行的操作')
@@ -547,10 +522,9 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
         .onChange(async (value) => {
           button.type = value;
           await this.plugin.saveSettings();
-          this.display(); // 重新显示以更新类型相关的设置
+          this.display();
         }));
 
-    // 根据类型显示不同的设置
     if (button.type === 'command') {
       new import_obsidian.Setting(content)
         .setName('命令ID')
@@ -570,7 +544,6 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
           search.setValue(button.file);
           search.setPlaceholder('例如：日记/2024.md');
           
-          // 创建文件选择器
           const modal = new FileSuggestModal(this.app, (file) => {
             button.file = file.path;
             search.setValue(file.path);
@@ -600,3 +573,4 @@ var CustomButtonsSettingTab = class extends import_obsidian.PluginSettingTab {
     }
   }
 };
+
