@@ -121,6 +121,3 @@
 ## 🤝 贡献与反馈
 
 欢迎提交 Issue 和 Pull Request！
-
-**开发者**: Albus  
-**GitHub**: [https://github.com/AlbusGuo](https://github.com/AlbusGuo)
