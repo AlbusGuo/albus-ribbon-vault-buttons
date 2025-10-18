@@ -1,3 +1,4 @@
+/* style.css */
 /* 主容器样式 */
 .basic-vault-button-header {
   margin-bottom: 16px;
@@ -204,6 +205,39 @@
   border-color: var(--interactive-accent);
   box-shadow: 0 0 0 1px rgba(var(--interactive-accent-rgb), 0.1);
   outline: none;
+}
+
+/* 命令搜索样式 */
+.command-search-container {
+  position: relative;
+  width: 100%;
+}
+
+.command-search-button {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.command-search-button:hover {
+  background: var(--interactive-accent-hover);
+}
+
+.command-search-input {
+  padding-right: 70px !important;
+  width: 100%;
 }
 
 /* 响应式设计 */
