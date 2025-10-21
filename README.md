@@ -2,6 +2,9 @@
 
 ![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?logo=obsidian)
 ![Version](https://img.shields.io/badge/Version-0.4-green)
+![GitHub all releases](https://img.shields.io/github/downloads/AlbusGuo/albus-ribbon-vault-buttons/total?style=for-the-badge)
+![GitHub release (latest by date)](https://img.shields.io/github/downloads/AlbusGuo/albus-ribbon-vault-buttons/latest/total?style=for-the-badge)
+
 
 一个重新设计 Obsidian 底部侧边栏按钮布局的插件，支持添加自定义功能按钮，让您的侧边栏更加个性化和实用。
 
