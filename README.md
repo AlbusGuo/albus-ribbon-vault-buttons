@@ -2,7 +2,7 @@
 
 ![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue?logo=obsidian)
 ![Version](https://img.shields.io/badge/Version-0.4-green)
-![GitHub all releases](https://img.shields.io/github/downloads/AlbusGuo/albus-ribbon-vault-buttons/total?style=for-the-badge)
+![GitHub all releases](https://img.shields.io/github/downloads/AlbusGuo/albus-ribbon-vault-buttons/total)
 ![GitHub release (latest by date)](https://img.shields.io/github/downloads/AlbusGuo/albus-ribbon-vault-buttons/latest/total?style=for-the-badge)
 
 
