@@ -1,6 +1,6 @@
 {
 	"name": "albus-ribbon-vault-buttons",
-	"version": "0.4",
+	"version": "0.0.2",
 	"description": "改变库按钮的基本布局, 且支持添加自定义功能按钮.",
 	"main": "main.js",
 	"scripts": {
