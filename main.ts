@@ -295,7 +295,6 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 
 /* 拖拽排序样式 */
 .custom-ribbon-button {
-  cursor: grab;
   transition: all 0.2s ease;
   position: relative;
 }
@@ -306,7 +305,6 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 
 .custom-ribbon-button.dragging {
   opacity: 0.5;
-  cursor: grabbing;
 }
 
 .custom-ribbon-button.drag-over {
