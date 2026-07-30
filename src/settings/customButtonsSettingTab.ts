@@ -1,8 +1,9 @@
-import { App, Command, Plugin, PluginSettingTab, Setting, SettingGroup, setIcon, setTooltip } from 'obsidian';
-import { ButtonItem, CustomButton, DividerItem, RibbonVaultButtonsSettings } from '../types';
+import { App, Plugin, PluginSettingTab, Setting, SettingGroup, setIcon, setTooltip } from 'obsidian';
+import { ButtonItem, CustomButton, RibbonVaultButtonsSettings } from '../types';
 import { createCustomButton, createDivider } from '../settings';
 import { ButtonEditorModal } from '../modals/buttonEditorModal';
 import { ConfirmModal } from '../modals/confirmModal';
+import { getRegisteredCommands } from '../utils/commandRegistry';
 import { CustomIconManager } from '../utils/customIconManager';
 import { FolderSuggester } from '../utils/folderSuggester';
 
@@ -16,6 +17,7 @@ interface RibbonVaultButtonsPlugin extends Plugin {
 	buttonManager: {
 		applyStyleSettings(hideBuiltInButtons?: boolean): void;
 		applyDefaultActionsStyle(hideDefaultActions?: boolean): void;
+		refreshButtonIcons(iconName?: string, loadUncachedIcons?: boolean): void;
 	};
 	customIconManager: CustomIconManager;
 }
@@ -24,6 +26,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 	plugin: RibbonVaultButtonsPlugin;
 	private draggedIndex: number | null = null;
 	private draggedArea: ButtonArea | null = null;
+	private commandNameById = new Map<string, string>();
 
 	icon: string = 'panel-left';
 
@@ -36,6 +39,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 		containerEl.addClass('basic-vault-settings-root');
+		this.commandNameById.clear();
 
 		// 固定顶部标签栏
 		const tabsEl = containerEl.createEl('div', { cls: 'basic-vault-settings-tabs' });
@@ -91,6 +95,12 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 	}
 
 	private renderButtonsTab(contentEl: HTMLElement, area: ButtonArea) {
+		if (this.commandNameById.size === 0) {
+			this.commandNameById = new Map(
+				getRegisteredCommands(this.app).map((command) => [command.id, command.name]),
+			);
+		}
+
 		const items = this.getItems(area);
 		const itemsGroup = new SettingGroup(contentEl);
 
@@ -103,7 +113,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		} else {
 			items.forEach((item, index) => {
 				if (item.type === 'divider') {
-					this.createDividerSetting(itemsGroup, item, index, 'left-ribbon');
+					this.createDividerSetting(itemsGroup, index, 'left-ribbon');
 					return;
 				}
 
@@ -111,7 +121,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 			});
 		}
 
-		// 添加按钮 — 复刻 custom-about-blank 的 add-setting 模式
+		// 添加按钮 - 复刻 custom-about-blank 的 add-setting 模式
 		itemsGroup.addSetting((addSetting) => {
 			addSetting.settingEl.addClass('basic-vault-item-add-setting');
 			addSetting.controlEl.addClass('basic-vault-item-add-container');
@@ -131,7 +141,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 						.setButtonText('添加分割线')
 						.setClass('basic-vault-item-add-btn')
 						.onClick(() => {
-							void this.addDivider(area);
+							void this.addDivider();
 						});
 				});
 			}
@@ -144,7 +154,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		settingsGroup.addSetting((setting) => {
 			setting
 				.setName('调整内置按钮到左侧功能区')
-				.setDesc('开启后将 Obsidian 原生的库切换、设置、帮助等按钮布局调整到左侧功能区')
+				.setDesc('开启后将 Obsidian 原生的库切换, 设置, 帮助等按钮布局调整到左侧功能区')
 				.addToggle((toggle) => toggle
 					.setValue(this.plugin.settings.hideBuiltInButtons)
 					.onChange(async (value) => {
@@ -174,7 +184,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 				.setDesc('自定义图标目录')
 				.addText((text) => {
 					text
-						.setPlaceholder('例如：Assets/Icons')
+						.setPlaceholder('例如: Assets/Icons')
 						.setValue(this.plugin.settings.iconFolder)
 						.onChange(async (value) => {
 							this.plugin.settings.iconFolder = value.trim();
@@ -194,7 +204,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.iconMask = value;
 						await this.plugin.saveSettings();
-						this.plugin.initVaultButtons();
+						this.plugin.buttonManager.refreshButtonIcons();
 						this.display();
 					}));
 		});
@@ -211,7 +221,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		this.openButtonEditor(area, index, true);
 	}
 
-	private async addDivider(area: Extract<ButtonArea, 'left-ribbon'>) {
+	private async addDivider() {
 		this.plugin.settings.leftRibbonItems.push(createDivider());
 		await this.plugin.saveSettings();
 		this.plugin.initVaultButtons();
@@ -235,8 +245,8 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		const confirmed = await ConfirmModal.confirm(this.app, {
 			title: isDivider ? '删除分割线' : '删除按钮',
 			message: isDivider
-				? '确定要删除这条分割线吗？此操作会立即生效。'
-				: `确定要删除“${(item as CustomButton).tooltip.trim() || '未命名按钮'}”吗？此操作会立即生效。`,
+				? '确定要删除这条分割线吗? 此操作会立即生效.'
+				: `确定要删除 "${(item as CustomButton).tooltip.trim() || '未命名按钮'}" 吗? 此操作会立即生效.`,
 			confirmText: '删除',
 			cancelText: '取消',
 			danger: true,
@@ -363,7 +373,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 			}
 		})();
 
-		return `${this.getButtonTypeLabel(button.type)} · ${target}`;
+		return `${this.getButtonTypeLabel(button.type)} - ${target}`;
 	}
 
 	private getButtonTypeLabel(type: CustomButton['type']): string {
@@ -379,7 +389,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		}
 	}
 
-	private createDividerSetting(actionsGroup: SettingGroup, divider: DividerItem, index: number, area: Extract<ButtonArea, 'left-ribbon'>) {
+	private createDividerSetting(actionsGroup: SettingGroup, index: number, area: Extract<ButtonArea, 'left-ribbon'>) {
 		actionsGroup.addSetting((setting) => {
 			setting.settingEl.addClass('basic-vault-button-setting');
 			setting.settingEl.dataset.index = index.toString();
@@ -426,7 +436,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 			return '未设置命令组';
 		}
 
-		return names.join('、');
+		return names.join(',');
 	}
 
 	private getCommandDisplayName(commandId: string): string {
@@ -434,24 +444,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 			return '未设置命令';
 		}
 
-		const command = this.getCommands().find((item) => item.id === commandId);
-		return command?.name || commandId;
-	}
-
-	private getCommands(): Command[] {
-		const commandRegistry = (this.app as App & {
-			commands?: { commands?: Record<string, Command> | Command[] };
-		}).commands?.commands;
-
-		if (Array.isArray(commandRegistry)) {
-			return commandRegistry;
-		}
-
-		if (commandRegistry && typeof commandRegistry === 'object') {
-			return Object.values(commandRegistry);
-		}
-
-		return [];
+		return this.commandNameById.get(commandId) || commandId;
 	}
 
 	private makeDraggable(element: HTMLElement, index: number, area: ButtonArea) {
@@ -474,7 +467,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 			this.draggedIndex = null;
 			this.draggedArea = null;
 			element.classList.remove('dragging');
-			document.querySelectorAll('.draggable-setting.drag-over').forEach((dragElement) => {
+			this.containerEl.querySelectorAll('.draggable-setting.drag-over').forEach((dragElement) => {
 				dragElement.classList.remove('drag-over');
 			});
 		});

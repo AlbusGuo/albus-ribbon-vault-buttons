@@ -17,9 +17,9 @@ export interface DividerItem {
  * 自定义按钮配置
  */
 export interface CustomButton {
-	/** 图标名称，支持 Obsidian 内置图标或 custom-file: 前缀的 SVG 文件路径 */
+	/** 图标名称, 支持 Obsidian 内置图标或 custom-file: 前缀的 SVG 文件路径 */
 	icon: string;
-	/** 切换后的图标名称，支持 Obsidian 内置图标或 custom-file: 前缀的 SVG 文件路径 */
+	/** 切换后的图标名称, 支持 Obsidian 内置图标或 custom-file: 前缀的 SVG 文件路径 */
 	toggleIcon: string;
 	/** 提示文字 */
 	tooltip: string;
@@ -31,14 +31,14 @@ export interface CustomButton {
 	file: string;
 	/** 网址 */
 	url: string;
-	/** 命令组，按顺序依次执行 */
+	/** 命令组, 按顺序依次执行 */
 	commands: string[];
-	/** 图标显示状态：true表示显示切换图标，false或undefined表示显示主图标 */
+	/** 图标显示状态: true表示显示切换图标, false或undefined表示显示主图标 */
 	iconState?: boolean;
 }
 
 /**
- * 按钮项类型（按钮或分割线）
+ * 按钮项类型 (按钮或分割线)
  */
 export type ButtonItem = CustomButton | DividerItem;
 
@@ -46,11 +46,11 @@ export type ButtonItem = CustomButton | DividerItem;
  * 插件设置接口
  */
 export interface RibbonVaultButtonsSettings {
-	/** 左侧边栏按钮项列表（包含按钮和分割线） */
+	/** 左侧边栏按钮项列表 (包含按钮和分割线) */
 	leftRibbonItems: ButtonItem[];
-	/** 页首按钮项列表（仅按钮） */
+	/** 页首按钮项列表 (仅按钮) */
 	pageHeaderItems: CustomButton[];
-	/** SVG 图标文件夹，用于过滤自定义图标 */
+	/** SVG 图标文件夹, 用于过滤自定义图标 */
 	iconFolder: string;
 	/** 是否将自定义 SVG 图标强制渲染为 var(--icon-color) */
 	iconMask: boolean;
@@ -63,7 +63,7 @@ export interface RibbonVaultButtonsSettings {
 }
 
 /**
- * 旧版内联自定义图标结构，仅用于迁移
+ * 旧版内联自定义图标结构, 仅用于迁移
  */
 export interface LegacyCustomIcon {
 	id: string;

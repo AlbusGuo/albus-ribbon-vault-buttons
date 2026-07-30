@@ -1,16 +1,28 @@
-import { App, normalizePath } from 'obsidian';
-import { isValidSvgContent } from '../settings';
+import { App, normalizePath, TFile, TFolder } from 'obsidian';
+import { sanitizeSvgContent } from './svgUtils';
+
+interface CachedIcon {
+	content: string;
+	maskImage?: string;
+	svgTemplate?: SVGElement;
+}
 
 /**
  * 自定义图标管理器
- * 负责注册、获取和渲染自定义SVG图标
+ * 负责注册, 获取和渲染自定义SVG图标
  */
 export class CustomIconManager {
 	static readonly FILE_PREFIX = 'custom-file:';
+	private static readonly MAX_CACHED_ICONS = 256;
+	private static readonly MAX_CACHED_CONTENT_LENGTH = 8_000_000;
 	private static instance: CustomIconManager;
 	private app: App | null = null;
-	private iconContentCache = new Map<string, string | null>();
+	private legacyIconDirectory: string | null = null;
+	private iconContentCache = new Map<string, CachedIcon>();
+	private cachedContentLength = 0;
 	private pendingLoads = new Map<string, Promise<string | null>>();
+	private loadVersions = new Map<string, number>();
+	private activeLoadCounts = new Map<string, number>();
 
 	private constructor() {}
 
@@ -43,6 +55,28 @@ export class CustomIconManager {
 		return `${CustomIconManager.FILE_PREFIX}${normalizePath(filePath)}`;
 	}
 
+	setLegacyIconDirectory(directoryPath: string): void {
+		this.legacyIconDirectory = normalizePath(directoryPath).replace(/\/$/, '');
+	}
+
+	invalidateIcon(iconName: string): void {
+		if (!this.isCustomIcon(iconName)) {
+			return;
+		}
+
+		this.deleteCachedIcon(iconName);
+		this.pendingLoads.delete(iconName);
+		if ((this.activeLoadCounts.get(iconName) ?? 0) > 0) {
+			this.loadVersions.set(iconName, (this.loadVersions.get(iconName) ?? 0) + 1);
+		} else {
+			this.loadVersions.delete(iconName);
+		}
+	}
+
+	hasCachedOrPendingIcon(iconName: string): boolean {
+		return this.iconContentCache.has(iconName) || this.pendingLoads.has(iconName);
+	}
+
 	/**
 	 * 从图标引用中提取文件路径
 	 */
@@ -51,7 +85,18 @@ export class CustomIconManager {
 			return null;
 		}
 
-		return normalizePath(iconName.slice(CustomIconManager.FILE_PREFIX.length));
+		const rawPath = iconName.slice(CustomIconManager.FILE_PREFIX.length);
+		const filePath = normalizePath(rawPath);
+		const pathSegments = filePath.split('/');
+		if (
+			!filePath ||
+			filePath.startsWith('/') ||
+			pathSegments.some((segment) => segment === '' || segment === '.' || segment === '..')
+		) {
+			return null;
+		}
+
+		return filePath;
 	}
 
 	/**
@@ -77,18 +122,31 @@ export class CustomIconManager {
 
 		const normalizedFolderPath = normalizePath(folderPath).replace(/\/$/, '');
 		try {
-			const files = this.app.vault.getFiles();
-			return files
-				.filter((file) => {
-					if (file.extension.toLowerCase() !== 'svg') {
-						return false;
-					}
+			const folder = this.app.vault.getAbstractFileByPath(normalizedFolderPath);
+			if (!(folder instanceof TFolder)) {
+				return [];
+			}
 
-					const normalizedFilePath = normalizePath(file.path);
-					return normalizedFilePath.startsWith(`${normalizedFolderPath}/`);
-				})
-				.map((file) => this.createIconReference(file.path))
-				.sort((left, right) => this.getDisplayName(left).localeCompare(this.getDisplayName(right), 'zh-CN'));
+			const files: TFile[] = [];
+			const pendingFolders = [folder];
+			while (pendingFolders.length > 0) {
+				const currentFolder = pendingFolders.pop();
+				if (!currentFolder) {
+					continue;
+				}
+
+				for (const child of currentFolder.children) {
+					if (child instanceof TFolder) {
+						pendingFolders.push(child);
+					} else if (child instanceof TFile && child.extension.toLowerCase() === 'svg') {
+						files.push(child);
+					}
+				}
+			}
+
+			return files
+				.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+				.map((file) => this.createIconReference(file.path));
 		} catch {
 			return [];
 		}
@@ -96,7 +154,14 @@ export class CustomIconManager {
 
 	async preloadIcons(iconNames: string[]): Promise<void> {
 		const uniqueIcons = Array.from(new Set(iconNames.filter((iconName) => this.isCustomIcon(iconName))));
-		await Promise.all(uniqueIcons.map((iconName) => this.ensureIconContent(iconName)));
+		let nextIconIndex = 0;
+		const workerCount = Math.min(8, uniqueIcons.length);
+		await Promise.all(Array.from({ length: workerCount }, async () => {
+			while (nextIconIndex < uniqueIcons.length) {
+				const iconName = uniqueIcons[nextIconIndex++];
+				await this.ensureIconContent(iconName);
+			}
+		}));
 	}
 
 	/**
@@ -109,16 +174,30 @@ export class CustomIconManager {
 		}
 
 		try {
+			const vaultFile = this.app.vault.getAbstractFileByPath(filePath);
+			if (vaultFile instanceof TFile) {
+				return sanitizeSvgContent(await this.app.vault.cachedRead(vaultFile));
+			}
+
+			if (
+				!this.legacyIconDirectory ||
+				!filePath.startsWith(`${this.legacyIconDirectory}/`)
+			) {
+				return null;
+			}
+
 			const content = await this.app.vault.adapter.read(filePath);
-			return isValidSvgContent(content) ? content : null;
+			return sanitizeSvgContent(content);
 		} catch {
 			return null;
 		}
 	}
 
 	private async ensureIconContent(iconName: string): Promise<string | null> {
-		if (this.iconContentCache.has(iconName)) {
-			return this.iconContentCache.get(iconName) ?? null;
+		const cachedIcon = this.iconContentCache.get(iconName);
+		if (cachedIcon !== undefined) {
+			this.touchCachedIcon(iconName, cachedIcon);
+			return cachedIcon.content;
 		}
 
 		const pending = this.pendingLoads.get(iconName);
@@ -126,31 +205,85 @@ export class CustomIconManager {
 			return pending;
 		}
 
-		const loadPromise = this.readIconContent(iconName)
+		const loadVersion = this.loadVersions.get(iconName) ?? 0;
+		this.activeLoadCounts.set(iconName, (this.activeLoadCounts.get(iconName) ?? 0) + 1);
+		let loadPromise: Promise<string | null>;
+		loadPromise = this.readIconContent(iconName)
 			.then((content) => {
-				this.iconContentCache.set(iconName, content);
-				this.pendingLoads.delete(iconName);
-				return content;
+				const isCurrentLoad = (this.loadVersions.get(iconName) ?? 0) === loadVersion;
+				if (isCurrentLoad && content !== null) {
+					this.cacheIconContent(iconName, content);
+				} else if (isCurrentLoad) {
+					this.deleteCachedIcon(iconName);
+				}
+				return isCurrentLoad ? content : null;
 			})
 			.catch(() => {
-				this.iconContentCache.set(iconName, null);
-				this.pendingLoads.delete(iconName);
+				if ((this.loadVersions.get(iconName) ?? 0) === loadVersion) {
+					this.deleteCachedIcon(iconName);
+				}
 				return null;
+			})
+			.finally(() => {
+				if (this.pendingLoads.get(iconName) === loadPromise) {
+					this.pendingLoads.delete(iconName);
+				}
+				const activeLoadCount = (this.activeLoadCounts.get(iconName) ?? 1) - 1;
+				if (activeLoadCount <= 0) {
+					this.activeLoadCounts.delete(iconName);
+					this.loadVersions.delete(iconName);
+				} else {
+					this.activeLoadCounts.set(iconName, activeLoadCount);
+				}
 			});
 
 		this.pendingLoads.set(iconName, loadPromise);
 		return loadPromise;
 	}
 
-	private toSvgDataUri(content: string): string {
-		return `url("data:image/svg+xml;utf8,${encodeURIComponent(content)}")`;
+	private cacheIconContent(iconName: string, content: string): void {
+		const existing = this.iconContentCache.get(iconName);
+		if (existing?.content === content) {
+			this.touchCachedIcon(iconName, existing);
+			return;
+		}
+
+		this.deleteCachedIcon(iconName);
+		const cachedIcon: CachedIcon = { content };
+		this.cachedContentLength += content.length;
+		this.touchCachedIcon(iconName, cachedIcon);
 	}
 
-	private renderMaskedSvgContent(content: string, containerEl: HTMLElement): boolean {
+	private touchCachedIcon(iconName: string, cachedIcon: CachedIcon): void {
+		this.iconContentCache.delete(iconName);
+		this.iconContentCache.set(iconName, cachedIcon);
+
+		while (
+			this.iconContentCache.size > CustomIconManager.MAX_CACHED_ICONS ||
+			this.cachedContentLength > CustomIconManager.MAX_CACHED_CONTENT_LENGTH
+		) {
+			const oldestIcon = this.iconContentCache.keys().next().value as string | undefined;
+			if (oldestIcon === undefined) {
+				break;
+			}
+			this.deleteCachedIcon(oldestIcon);
+		}
+	}
+
+	private deleteCachedIcon(iconName: string): void {
+		const cachedIcon = this.iconContentCache.get(iconName);
+		if (cachedIcon) {
+			this.cachedContentLength -= cachedIcon.content.length;
+			this.iconContentCache.delete(iconName);
+		}
+	}
+
+	private renderMaskedSvgContent(cachedIcon: CachedIcon, containerEl: HTMLElement): boolean {
 		try {
 			containerEl.empty();
 			const maskEl = containerEl.createDiv({ cls: 'custom-icon-mask custom-icon-svg' });
-			maskEl.style.setProperty('--custom-icon-image', this.toSvgDataUri(content));
+			cachedIcon.maskImage ??= `url("data:image/svg+xml;utf8,${encodeURIComponent(cachedIcon.content)}")`;
+			maskEl.style.setProperty('--custom-icon-image', cachedIcon.maskImage);
 			return true;
 		} catch {
 			return false;
@@ -158,45 +291,43 @@ export class CustomIconManager {
 	}
 
 	renderIconFromCache(iconName: string, containerEl: HTMLElement, masked = false): boolean {
-		const content = this.iconContentCache.get(iconName);
-		if (!content) {
+		const cachedIcon = this.iconContentCache.get(iconName);
+		if (!cachedIcon) {
 			return false;
 		}
+		this.touchCachedIcon(iconName, cachedIcon);
 
 		return masked
-			? this.renderMaskedSvgContent(content, containerEl)
-			: this.renderSvgContent(content, containerEl);
+			? this.renderMaskedSvgContent(cachedIcon, containerEl)
+			: this.renderSvgContent(cachedIcon, containerEl);
 	}
 
 	/**
 	 * 渲染 SVG 内容到 DOM 元素
 	 */
-	private renderSvgContent(content: string, containerEl: HTMLElement): boolean {
+	private renderSvgContent(cachedIcon: CachedIcon, containerEl: HTMLElement): boolean {
 		try {
 			containerEl.empty();
 
-			const parser = new DOMParser();
-			const doc = parser.parseFromString(content, 'image/svg+xml');
-			const svgEl = doc.querySelector('svg');
-
-			if (!svgEl) {
-				return false;
-			}
-
-			const importedSvg = document.importNode(svgEl, true) as SVGElement;
-			importedSvg.classList.add('custom-icon-svg');
-
-			if (!importedSvg.hasAttribute('viewBox')) {
-				const width = importedSvg.getAttribute('width');
-				const height = importedSvg.getAttribute('height');
-				if (width && height) {
-					importedSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-				} else {
-					importedSvg.setAttribute('viewBox', '0 0 24 24');
+			if (!cachedIcon.svgTemplate) {
+				const parser = new DOMParser();
+				const doc = parser.parseFromString(cachedIcon.content, 'image/svg+xml');
+				const svgEl = doc.querySelector('svg');
+				if (!svgEl) {
+					return false;
 				}
+
+				const template = document.importNode(svgEl, true) as SVGElement;
+				template.classList.add('custom-icon-svg');
+				if (!template.hasAttribute('viewBox')) {
+					const width = template.getAttribute('width');
+					const height = template.getAttribute('height');
+					template.setAttribute('viewBox', width && height ? `0 0 ${width} ${height}` : '0 0 24 24');
+				}
+				cachedIcon.svgTemplate = template;
 			}
 
-			containerEl.appendChild(importedSvg);
+			containerEl.appendChild(cachedIcon.svgTemplate.cloneNode(true));
 			return true;
 		} catch {
 			return false;
@@ -216,8 +347,6 @@ export class CustomIconManager {
 			return false;
 		}
 
-		return masked
-			? this.renderMaskedSvgContent(content, containerEl)
-			: this.renderSvgContent(content, containerEl);
+		return this.renderIconFromCache(iconName, containerEl, masked);
 	}
 }

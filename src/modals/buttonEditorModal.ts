@@ -26,8 +26,6 @@ export class ButtonEditorModal {
 	private commandGroupContainerEl: HTMLElement | null = null;
 	private primaryPreviewEl: HTMLElement | null = null;
 	private togglePreviewEl: HTMLElement | null = null;
-	private saveChain: Promise<void> = Promise.resolve();
-	private autoSaveTimer: number | null = null;
 	private lastCommittedState: string;
 
 	constructor(app: App, button: CustomButton, options: ButtonEditorModalOptions) {
@@ -55,15 +53,7 @@ export class ButtonEditorModal {
 				});
 			},
 			onClose: () => {
-				this.contentEl = null;
-				this.nameInputEl = null;
-				this.valueInputEl = null;
-				this.typeSelectEl = null;
-				this.commandGroupContainerEl = null;
-				this.primaryPreviewEl = null;
-				this.togglePreviewEl = null;
-				this.modal = null;
-				this.options.onClose?.();
+				void this.finalizeClose();
 			},
 		});
 
@@ -71,11 +61,6 @@ export class ButtonEditorModal {
 	};
 
 	close = (): void => {
-		if (this.autoSaveTimer !== null) {
-			window.clearTimeout(this.autoSaveTimer);
-			this.autoSaveTimer = null;
-		}
-
 		this.modal?.close();
 	};
 
@@ -279,11 +264,6 @@ export class ButtonEditorModal {
 	}
 
 	private async commitChanges(): Promise<void> {
-		if (this.autoSaveTimer !== null) {
-			window.clearTimeout(this.autoSaveTimer);
-			this.autoSaveTimer = null;
-		}
-
 		this.draft.tooltip = this.nameInputEl?.value ?? this.draft.tooltip;
 		if (this.valueInputEl) {
 			this.setCurrentValue(this.valueInputEl.value);
@@ -296,21 +276,29 @@ export class ButtonEditorModal {
 			return;
 		}
 
-		this.saveChain = this.saveChain.then(async () => {
+		try {
 			await this.options.onChange(nextButton);
 			this.lastCommittedState = nextState;
-		});
-		await this.saveChain;
+		} catch (error) {
+			console.error('Custom Buttons failed to save button changes:', error);
+		}
+	}
+
+	private async finalizeClose(): Promise<void> {
+		await this.commitChanges();
+		this.contentEl = null;
+		this.nameInputEl = null;
+		this.valueInputEl = null;
+		this.typeSelectEl = null;
+		this.commandGroupContainerEl = null;
+		this.primaryPreviewEl = null;
+		this.togglePreviewEl = null;
+		this.modal = null;
+		this.options.onClose?.();
 	}
 
 	private scheduleCommit(): void {
-		if (this.autoSaveTimer !== null) {
-			window.clearTimeout(this.autoSaveTimer);
-		}
-
-		this.autoSaveTimer = window.setTimeout(() => {
-			void this.commitChanges();
-		}, 180);
+		void this.commitChanges();
 	}
 
 	private normalizeTypeSpecificValues(): void {

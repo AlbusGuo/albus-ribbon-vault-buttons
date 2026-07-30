@@ -1,13 +1,5 @@
 /* NOTE: make any modifications to this file in src/Styles/styles.css */
 
-/* 防止初始化时功能区布局闪烁：插件就绪 (crb-ready) 前隐藏整个左侧功能区，
-   同时禁用所有过渡动画，确保显示时直接呈现最终布局状态 */
-body:not(.crb-ready):not(.is-mobile) .workspace-ribbon.mod-left,
-body:not(.crb-ready):not(.is-mobile) .workspace-ribbon.mod-left * {
-  visibility: hidden !important;
-  transition: none !important;
-}
-
 /* 隐藏内置按钮区域 - 插件启用后默认生效, 通过 crb-show-builtin 类来取消隐藏 */
 body:not(.is-mobile):not(.crb-show-builtin) .workspace-split.mod-left-split .workspace-sidedock-vault-profile {
   display: none !important;
@@ -18,7 +10,7 @@ body.crb-hide-default-actions .side-dock-actions {
   display: none !important;
 }
 
-/* 设置面板样式 — 固定标签页 + 可滚动内容 */
+/* 设置面板样式 - 固定标签页 + 可滚动内容 */
 
 .basic-vault-settings-root {
   display: flex;
@@ -49,7 +41,6 @@ body.crb-hide-default-actions .side-dock-actions {
   font-size: var(--font-ui-medium);
   font-weight: 500;
   color: var(--text-muted);
-  transition: color .1s ease;
   border-bottom: 2px solid transparent;
   user-select: none;
 }
@@ -75,10 +66,6 @@ body.crb-hide-default-actions .side-dock-actions {
   padding-top: 16px;
 }
 
-.basic-vault-settings-content .setting-group + .setting-item-heading {
-  margin-top: 1.5em;
-}
-
 .basic-vault-settings-content .setting-item-control {
   flex-wrap: wrap;
   gap: 8px;
@@ -88,10 +75,12 @@ body.crb-hide-default-actions .side-dock-actions {
   flex-shrink: 0;
 }
 
-/* 按钮设置项样式 — 复刻 custom-about-blank */
+/* 按钮设置项样式 - 复刻 custom-about-blank */
 
 .basic-vault-button-setting {
   align-items: center;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
 }
 
 .basic-vault-button-setting .setting-item-info {
@@ -167,11 +156,19 @@ body.crb-hide-default-actions .side-dock-actions {
   height: 16px;
 }
 
-.basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer.is-primary {
+.basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer.is-toggle {
+  opacity: 0;
+}
+
+.basic-vault-button-setting:is(:hover, :focus-within)
+  .basic-vault-button-name-icon.is-animated
+  .basic-vault-button-name-icon-layer.is-primary {
   animation: basic-vault-button-icon-primary-fade 4s ease-in-out infinite;
 }
 
-.basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer.is-toggle {
+.basic-vault-button-setting:is(:hover, :focus-within)
+  .basic-vault-button-name-icon.is-animated
+  .basic-vault-button-name-icon-layer.is-toggle {
   animation: basic-vault-button-icon-toggle-fade 4s ease-in-out infinite;
 }
 
@@ -203,7 +200,7 @@ body.crb-hide-default-actions .side-dock-actions {
   }
 }
 
-/* 添加按钮区域 — 复刻 custom-about-blank 的 item-add 模式 */
+/* 添加按钮区域 - 复刻 custom-about-blank 的 item-add 模式 */
 .basic-vault-item-add-setting {
   padding: 0;
   border-top: none;
@@ -232,7 +229,7 @@ body.crb-hide-default-actions .side-dock-actions {
   display: flex;
   align-items: center;
   gap: 0.375em;
-  background: var(--interactive-accent);
+  background-color: var(--interactive-accent);
   color: var(--text-on-accent);
   border: none;
   border-radius: var(--radius-s);
@@ -240,12 +237,11 @@ body.crb-hide-default-actions .side-dock-actions {
   cursor: pointer;
   font-size: var(--font-ui-small);
   font-weight: 500;
-  transition: background 0.2s ease;
   flex: 1;
 }
 
 .basic-vault-item-add-btn:hover {
-  background: var(--interactive-accent-hover);
+  background-color: var(--interactive-accent-hover);
 }
 
 .basic-vault-button-editor-modal-shell {
@@ -382,8 +378,9 @@ body.crb-hide-default-actions .side-dock-actions {
   gap: 12px;
 }
 
-.basic-vault-confirm-modal h3 {
-  margin: 0;
+.basic-vault-confirm-modal > .setting-item-heading {
+  padding: 0;
+  border: 0;
 }
 
 .basic-vault-confirm-modal-message {
@@ -433,42 +430,6 @@ body.crb-hide-default-actions .side-dock-actions {
   order: -1000;
 }
 
-/* 当容器宽度小于 900px 时，控件自适应宽度 */
-@media (max-width: 900px) {
-  /* 只对文本框、下拉框和按钮应用自适应宽度 */
-  .basic-vault-button-setting .setting-item-control > input[type="text"],
-  .basic-vault-button-setting .setting-item-control > select,
-  .basic-vault-button-setting .setting-item-control > button,
-  .basic-vault-button-setting .setting-item-control > .clickable-icon {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  
-  /* 图标选择器按钮保持固定宽度 */
-  .basic-vault-button-setting .setting-item-control > .icon-picker-button-compact {
-    flex: none !important;
-    width: 32px !important;
-    min-width: 32px !important;
-    max-width: 32px !important;
-  }
-  
-  /* 删除按钮保持固定宽度 */
-  .basic-vault-button-setting .setting-item-control > .clickable-icon.setting-item-extra-button {
-    flex: none !important;
-    width: auto !important;
-    min-width: auto !important;
-    max-width: none !important;
-  }
-  
-  /* 拖拽手柄保持固定宽度 */
-  .basic-vault-button-setting .setting-item-control > .drag-handle {
-    flex: none !important;
-    width: auto !important;
-    min-width: auto !important;
-    max-width: none !important;
-  }
-}
-
 /* 响应式调整 */
 @media (max-width: 768px) {
   .basic-vault-item-add-container {
@@ -509,22 +470,19 @@ body.crb-hide-default-actions .side-dock-actions {
     overflow-wrap: break-word;
   }
 
-  .basic-vault-button-setting .setting-item-control button {
-    width: auto;
-    min-width: 80px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer {
+    animation: none;
   }
 
-  .basic-vault-button-setting .setting-item-control input[type="text"] {
-    min-width: 80px;
+  .basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer.is-toggle {
+    display: none;
   }
 }
 
 /* 按钮相关样式 */
-
-/* 隐藏的回退元素 */
-.custom-ribbon-hidden {
-  display: none;
-}
 
 /* 紧凑型图标选择器样式 */
 .icon-picker-button-compact {
@@ -539,7 +497,6 @@ body.crb-hide-default-actions .side-dock-actions {
   border-radius: 4px;
   background-color: var(--background-primary);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
   font-size: 14px;
   flex-shrink: 0;
 }
@@ -561,16 +518,6 @@ body.crb-hide-default-actions .side-dock-actions {
 .icon-picker-preview-compact svg {
   width: 16px;
   height: 16px;
-}
-
-/* 自定义功能区按钮样式 */
-.custom-ribbon-button {
-  transition: background-color 0.15s ease, opacity 0.15s ease;
-  position: relative;
-}
-
-.custom-ribbon-button:hover {
-  background-color: var(--background-modifier-hover);
 }
 
 /* 分割线样式 */
@@ -612,7 +559,8 @@ body.crb-hide-default-actions .side-dock-actions {
 }
 
 .draggable-setting.drag-over {
-  border: 2px dashed var(--interactive-accent) !important;
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: -2px;
   background-color: var(--background-modifier-hover) !important;
 }
 
@@ -622,7 +570,8 @@ body.crb-hide-default-actions .side-dock-actions {
 }
 
 .custom-ribbon-button.drag-over {
-  border: 2px dashed var(--interactive-accent);
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: -2px;
   background-color: var(--background-modifier-hover);
 }
 

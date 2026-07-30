@@ -4,26 +4,33 @@ import { CustomIconManager } from '../utils/customIconManager';
 interface IconSuggestionItem {
 	value: string;
 	label: string;
+	searchText: string;
 }
 
 /**
  * 图标选择器模态框
  */
 export class IconSuggestModal extends SuggestModal<IconSuggestionItem> {
-	private icons: IconSuggestionItem[];
-	private onChoose: (iconName: string) => void;
-	private customIconManager: CustomIconManager;
-	private masked: boolean;
+	private readonly icons: IconSuggestionItem[];
+	private readonly onChoose: (iconName: string) => void;
+	private readonly customIconManager: CustomIconManager;
+	private readonly masked: boolean;
 
 	constructor(app: App, icons: string[], masked: boolean, onChoose: (iconName: string) => void) {
 		super(app);
 		this.onChoose = onChoose;
 		this.customIconManager = CustomIconManager.getInstance();
 		this.masked = masked;
-		this.icons = icons.map((icon) => ({
-			value: icon,
-			label: this.customIconManager.isCustomIcon(icon) ? this.customIconManager.getDisplayName(icon) : icon
-		}));
+		this.icons = icons.map((icon) => {
+			const label = this.customIconManager.isCustomIcon(icon)
+				? this.customIconManager.getDisplayName(icon)
+				: icon;
+			return {
+				value: icon,
+				label,
+				searchText: label.toLowerCase(),
+			};
+		});
 		
 		this.setPlaceholder('搜索图标名称...');
 	}
@@ -41,8 +48,8 @@ export class IconSuggestModal extends SuggestModal<IconSuggestionItem> {
 			return this.icons;
 		}
 
-		const splitQueries = lowerQuery.trim().split(' ').filter(Boolean);
-		return this.icons.filter((icon) => splitQueries.every((keyword) => icon.label.toLowerCase().includes(keyword)));
+		const splitQueries = lowerQuery.trim().split(/\s+/).filter(Boolean);
+		return this.icons.filter((icon) => splitQueries.every((keyword) => icon.searchText.includes(keyword)));
 	}
 
 	renderSuggestion(icon: IconSuggestionItem, el: HTMLElement): void {
@@ -61,7 +68,7 @@ export class IconSuggestModal extends SuggestModal<IconSuggestionItem> {
 		}
 	}
 
-	onChooseSuggestion(icon: IconSuggestionItem, evt: MouseEvent | KeyboardEvent): void {
+	onChooseSuggestion(icon: IconSuggestionItem, _event: MouseEvent | KeyboardEvent): void {
 		this.onChoose(icon.value);
 	}
 }

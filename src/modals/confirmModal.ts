@@ -1,4 +1,4 @@
-import { App, Modal } from 'obsidian';
+import { App, Modal, Setting } from 'obsidian';
 
 interface ConfirmModalOptions {
 	title: string;
@@ -24,7 +24,9 @@ export class ConfirmModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass('basic-vault-confirm-modal');
 
-		contentEl.createEl('h3', { text: this.options.title });
+		new Setting(contentEl)
+			.setName(this.options.title)
+			.setHeading();
 		contentEl.createEl('p', {
 			cls: 'basic-vault-confirm-modal-message',
 			text: this.options.message,

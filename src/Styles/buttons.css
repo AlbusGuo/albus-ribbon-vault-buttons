@@ -1,10 +1,5 @@
 /* 按钮相关样式 */
 
-/* 隐藏的回退元素 */
-.custom-ribbon-hidden {
-  display: none;
-}
-
 /* 紧凑型图标选择器样式 */
 .icon-picker-button-compact {
   display: flex;
@@ -18,7 +13,6 @@
   border-radius: 4px;
   background-color: var(--background-primary);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
   font-size: 14px;
   flex-shrink: 0;
 }
@@ -40,16 +34,6 @@
 .icon-picker-preview-compact svg {
   width: 16px;
   height: 16px;
-}
-
-/* 自定义功能区按钮样式 */
-.custom-ribbon-button {
-  transition: background-color 0.15s ease, opacity 0.15s ease;
-  position: relative;
-}
-
-.custom-ribbon-button:hover {
-  background-color: var(--background-modifier-hover);
 }
 
 /* 分割线样式 */

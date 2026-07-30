@@ -9,8 +9,8 @@ interface FileSuggestModalOptions {
  * 文件建议模态框
  */
 export class FileSuggestModal extends FuzzySuggestModal<TFile> {
-	private onChoose: (file: TFile) => void;
-	private filter?: (file: TFile) => boolean;
+	private readonly onChoose: (file: TFile) => void;
+	private readonly filter?: (file: TFile) => boolean;
 
 	constructor(app: App, onChoose: (file: TFile) => void, options?: FileSuggestModalOptions) {
 		super(app);
@@ -34,7 +34,7 @@ export class FileSuggestModal extends FuzzySuggestModal<TFile> {
 		return file.path;
 	}
 
-	onChooseItem(file: TFile, evt: MouseEvent | KeyboardEvent): void {
+	onChooseItem(file: TFile, _event: MouseEvent | KeyboardEvent): void {
 		this.onChoose(file);
 	}
 }

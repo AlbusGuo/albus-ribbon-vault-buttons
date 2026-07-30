@@ -13,7 +13,11 @@ export const DEFAULT_SETTINGS: RibbonVaultButtonsSettings = {
 	settingsTab: 'general'
 };
 
-function normalizeIconName(iconName: string): string {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return Object.prototype.toString.call(value) === '[object Object]';
+}
+
+function normalizeIconName(iconName: unknown): string {
 	if (typeof iconName !== 'string' || iconName.length === 0) {
 		return 'help-circle';
 	}
@@ -48,24 +52,12 @@ export function createDivider(): DividerItem {
 }
 
 /**
- * 验证SVG内容
- */
-export function isValidSvgContent(content: string): boolean {
-	// 简单检查：包含<svg>标签且长度合理
-	return content.includes('<svg') && content.includes('</svg>') && content.length > 10;
-}
-
-/**
  * 验证和清理设置
  */
 export function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonVaultButtonsSettings {
-	const legacyItems = Array.isArray((settings as unknown as { buttonItems?: ButtonItem[] }).buttonItems)
-		? (settings as unknown as { buttonItems: ButtonItem[] }).buttonItems
-		: [];
-
 	const leftRibbonItems = Array.isArray(settings.leftRibbonItems)
 		? settings.leftRibbonItems
-		: legacyItems;
+		: [];
 
 	const cleaned: RibbonVaultButtonsSettings = {
 		leftRibbonItems,
@@ -79,29 +71,103 @@ export function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): 
 			: DEFAULT_SETTINGS.settingsTab
 	};
 
-	const normalizeButton = (item: CustomButton): CustomButton => ({
-		...item,
-		icon: normalizeIconName(item.icon),
-		toggleIcon: normalizeIconName(item.toggleIcon || item.icon),
-		command: typeof item.command === 'string' ? item.command : '',
-		file: typeof item.file === 'string' ? item.file : '',
-		url: typeof item.url === 'string' ? item.url : '',
-		commands: Array.isArray(item.commands)
-			? item.commands.filter((commandId) => typeof commandId === 'string')
-			: []
-	});
-
-	cleaned.leftRibbonItems = cleaned.leftRibbonItems.map((item) => {
-		if (item.type === 'divider') {
-			return item;
+	const normalizeButton = (item: unknown): CustomButton | null => {
+		if (!item || typeof item !== 'object' || Array.isArray(item)) {
+			return null;
 		}
 
-		return normalizeButton(item as CustomButton);
+		const candidate = item as Partial<CustomButton>;
+		if (
+			candidate.type !== 'command' &&
+			candidate.type !== 'command-group' &&
+			candidate.type !== 'file' &&
+			candidate.type !== 'url'
+		) {
+			return null;
+		}
+
+		const button: CustomButton = {
+			icon: normalizeIconName(candidate.icon),
+			toggleIcon: normalizeIconName(candidate.toggleIcon || candidate.icon),
+			tooltip: typeof candidate.tooltip === 'string' ? candidate.tooltip : '未命名按钮',
+			type: candidate.type,
+			command: typeof candidate.command === 'string' ? candidate.command : '',
+			file: typeof candidate.file === 'string' ? candidate.file : '',
+			url: typeof candidate.url === 'string' ? candidate.url : '',
+			commands: Array.isArray(candidate.commands)
+				? candidate.commands.filter((commandId): commandId is string => typeof commandId === 'string')
+				: [],
+		};
+
+		if (typeof candidate.iconState === 'boolean') {
+			button.iconState = candidate.iconState;
+		}
+
+		return button;
+	};
+
+	const usedRibbonIds = new Set(['vault', 'help', 'settings']);
+	cleaned.leftRibbonItems = cleaned.leftRibbonItems.flatMap<ButtonItem>((item): ButtonItem[] => {
+		if (item && typeof item === 'object' && !Array.isArray(item) && item.type === 'divider') {
+			const divider = item as Partial<DividerItem>;
+			let dividerId = typeof divider.id === 'string' && divider.id.length > 0
+				? divider.id
+				: createDivider().id;
+			while (usedRibbonIds.has(dividerId)) {
+				dividerId = createDivider().id;
+			}
+			usedRibbonIds.add(dividerId);
+			return [{
+				type: 'divider' as const,
+				id: dividerId,
+			}];
+		}
+
+		const button = normalizeButton(item);
+		return button ? [button] : [];
 	});
 
 	cleaned.pageHeaderItems = cleaned.pageHeaderItems
-		.filter((item): item is CustomButton => !!item && (item as ButtonItem).type !== 'divider')
-		.map((item) => normalizeButton(item));
+		.map((item) => normalizeButton(item))
+		.filter((item): item is CustomButton => item !== null);
 
 	return cleaned;
+}
+
+/**
+ * 按白名单清理设置对象及兼容旧版按钮字段.
+ */
+export function sanitizeSettingsShape(raw: unknown): RibbonVaultButtonsSettings {
+	const defaults = structuredClone(DEFAULT_SETTINGS);
+	if (!isPlainObject(raw)) {
+		return defaults;
+	}
+
+	const data = raw as Record<string, unknown>;
+	return validateAndCleanSettings({
+		leftRibbonItems: Array.isArray(data.leftRibbonItems)
+			? data.leftRibbonItems as ButtonItem[]
+			: Array.isArray(data.buttonItems)
+				? data.buttonItems as ButtonItem[]
+				: Array.isArray(data.customButtons)
+					? data.customButtons as ButtonItem[]
+					: defaults.leftRibbonItems,
+		pageHeaderItems: Array.isArray(data.pageHeaderItems)
+			? data.pageHeaderItems as CustomButton[]
+			: defaults.pageHeaderItems,
+		iconFolder: typeof data.iconFolder === 'string' ? data.iconFolder : defaults.iconFolder,
+		iconMask: typeof data.iconMask === 'boolean' ? data.iconMask : defaults.iconMask,
+		hideBuiltInButtons: typeof data.hideBuiltInButtons === 'boolean'
+			? data.hideBuiltInButtons
+			: defaults.hideBuiltInButtons,
+		hideDefaultActions: typeof data.hideDefaultActions === 'boolean'
+			? data.hideDefaultActions
+			: defaults.hideDefaultActions,
+		settingsTab:
+			data.settingsTab === 'general' ||
+			data.settingsTab === 'left-ribbon' ||
+			data.settingsTab === 'page-header'
+				? data.settingsTab
+				: defaults.settingsTab,
+	});
 }

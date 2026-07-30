@@ -1,11 +1,3 @@
-/* 防止初始化时功能区布局闪烁：插件就绪 (crb-ready) 前隐藏整个左侧功能区，
-   同时禁用所有过渡动画，确保显示时直接呈现最终布局状态 */
-body:not(.crb-ready):not(.is-mobile) .workspace-ribbon.mod-left,
-body:not(.crb-ready):not(.is-mobile) .workspace-ribbon.mod-left * {
-  visibility: hidden !important;
-  transition: none !important;
-}
-
 /* 隐藏内置按钮区域 - 插件启用后默认生效, 通过 crb-show-builtin 类来取消隐藏 */
 body:not(.is-mobile):not(.crb-show-builtin) .workspace-split.mod-left-split .workspace-sidedock-vault-profile {
   display: none !important;

@@ -1,16 +1,26 @@
-import { App, ItemView, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
+import { App, ItemView, TFile, WorkspaceLeaf, normalizePath, setIcon } from 'obsidian';
 import { CustomButton, ButtonItem, DividerItem } from '../types';
 import { CustomIconManager } from './customIconManager';
 
-/**
- * 内置按钮配置
- */
-interface BuiltInButton {
-	id: string;
-	tooltip: string;
-	icon: string;
-	onClick: () => void;
-	draggable: boolean;
+interface InternalRibbon {
+	ribbonActionsEl?: HTMLElement;
+	ribbonSettingEl?: HTMLElement;
+	makeRibbonItemButton(
+		icon: string,
+		tooltip: string,
+		callback: (event: MouseEvent) => void,
+	): HTMLElement;
+}
+
+interface InternalApp extends App {
+	commands: {
+		executeCommandById(commandId: string): unknown;
+	};
+	openVaultChooser(): void;
+	openHelp(): void;
+	setting: {
+		open(): void;
+	};
 }
 
 /**
@@ -23,7 +33,7 @@ interface DragState {
 
 /**
  * 按钮管理器类
- * 负责管理所有按钮的创建、销毁和交互
+ * 负责管理所有按钮的创建, 销毁和交互
  */
 export class ButtonManager {
 	private ribbonMap = new Map<string, HTMLElement>();
@@ -33,17 +43,21 @@ export class ButtonManager {
 		isDragging: false,
 		dragSource: null
 	};
-	// 跟踪每个按钮的图标切换状态：true表示显示切换图标，false表示显示主图标
+	// 跟踪每个按钮的图标切换状态: true表示显示切换图标, false表示显示主图标
 	private toggleStates = new Map<string, boolean>();
 	// 存储按钮配置
 	private buttonConfigs = new Map<string, CustomButton>();
 	// 自定义图标管理器
 	private customIconManager: CustomIconManager;
+	private scheduledAnimationFrames = new Set<number>();
+	private layoutSyncScheduled = false;
+	private destroyed = false;
 
 	constructor(
 		private app: App,
-		private onSettingsChange: () => void,
-		private onReorderButtons: (sourceIndex: number, targetIndex: number) => void,
+		private onIconStateChange: (buttonId: string, iconState: boolean) => Promise<void>,
+		private onReorderButtons: (sourceIndex: number, targetIndex: number) => Promise<void>,
+		private waitForSettingsWrites: () => Promise<void>,
 		private shouldMaskCustomIcons: () => boolean
 	) {
 		this.customIconManager = CustomIconManager.getInstance(this.app);
@@ -52,28 +66,24 @@ export class ButtonManager {
 	/**
 	 * 初始化所有按钮
 	 */
-	initVaultButtons(leftRibbonItems: ButtonItem[], pageHeaderItems: CustomButton[], hideBuiltInButtons: boolean = true) {
-		// 获取 ribbon 容器引用，用于批量 DOM 更新
-		// @ts-ignore
-		const leftRibbon = this.app.workspace.leftRibbon;
-		const ribbonActionsEl = (leftRibbon as any)?.ribbonActionsEl as HTMLElement | undefined;
-
-		// 在创建按钮前暂时隐藏容器，防止逐个插入导致多次布局重排
-		if (ribbonActionsEl) {
-			ribbonActionsEl.style.display = 'none';
+	initVaultButtons(
+		leftRibbonItems: ButtonItem[],
+		pageHeaderItems: CustomButton[],
+		hideBuiltInButtons: boolean = true,
+		loadUncachedIcons = true,
+	) {
+		if (this.destroyed) {
+			return;
 		}
+
+		this.cancelScheduledAnimationFrames();
 
 		this.clearAllButtons();
-		this.initLeftRibbonItems(leftRibbonItems);
+		this.initLeftRibbonItems(leftRibbonItems, loadUncachedIcons);
 		this.initPageHeaderItems(pageHeaderItems);
-		this.addPageHeaderButtons(pageHeaderItems);
+		this.addPageHeaderButtons(pageHeaderItems, loadUncachedIcons);
 		if (hideBuiltInButtons) {
 			this.initBuiltInButtons();
-		}
-
-		// 恢复显示 — 浏览器只做一次布局计算，完全消除中间状态
-		if (ribbonActionsEl) {
-			ribbonActionsEl.style.display = '';
 		}
 	}
 
@@ -94,14 +104,14 @@ export class ButtonManager {
 	}
 
 	/**
-	 * 初始化按钮项（包含按钮和分割线）
+	 * 初始化按钮项 (包含按钮和分割线)
 	 */
-	private initLeftRibbonItems(buttonItems: ButtonItem[]) {
+	private initLeftRibbonItems(buttonItems: ButtonItem[], loadUncachedIcons: boolean) {
 		buttonItems.forEach((item, index) => {
 			if (item.type === 'divider') {
-				this.createDivider(item as DividerItem, index);
+				this.createDivider(item, index);
 			} else {
-				this.createCustomButton(item as CustomButton, index, 'left');
+				this.createCustomButton(item, index, 'left', loadUncachedIcons);
 			}
 		});
 	}
@@ -116,109 +126,114 @@ export class ButtonManager {
 	 * 初始化内置按钮
 	 */
 	private initBuiltInButtons() {
-		const builtInButtons: BuiltInButton[] = [
-			{
-				id: 'vault',
-				tooltip: '切换库',
-				icon: 'vault',
-				onClick: () => this.showVaultChooser(),
-				draggable: false
-			},
-			{
-				id: 'help',
-				tooltip: '帮助',
-				icon: 'help',
-				onClick: () => this.showHelp(),
-				draggable: false
-			},
-			{
-				id: 'settings',
-				tooltip: '设置',
-				icon: 'settings',
-				onClick: () => this.showSettings(),
-				draggable: false
-			}
-		];
-
-		builtInButtons.forEach((button) => {
-			this.createRibbonButton(button.id, button.tooltip, button.icon, button.onClick, button.draggable);
-		});
+		this.createRibbonButton('vault', '切换库', 'vault', () => this.showVaultChooser());
+		this.createRibbonButton('help', '帮助', 'help', () => this.showHelp());
+		this.createRibbonButton('settings', '设置', 'settings', () => this.showSettings());
 	}
 
 	/**
 	 * 创建自定义按钮
 	 */
-	createCustomButton(button: CustomButton, index: number, area: 'left' | 'page') {
+	private createCustomButton(
+		button: CustomButton,
+		index: number,
+		area: 'left' | 'page',
+		loadUncachedIcon = true,
+	) {
 		const buttonId = `${area}-${index}`;
 		
 		// 存储按钮配置
 		this.buttonConfigs.set(buttonId, button);
 		
-		// 从settings恢复图标状态，默认为false（显示主图标）
+		// 从settings恢复图标状态, 默认为false (显示主图标)
 		const savedState = button.iconState || false;
 		this.toggleStates.set(buttonId, savedState);
 		
 		// 根据保存的状态选择初始图标
 		const initialIcon = savedState ? (button.toggleIcon || button.icon) : button.icon;
 		
-		const onClick = () => {
-			// 先切换图标
-			this.toggleButtonIcon(buttonId);
-			
-			// 然后执行按钮的功能
-			this.handleButtonClick(button);
-		};
+		const onClick = () => this.activateCustomButton(buttonId, button);
 
 		if (area === 'left') {
-			return this.createRibbonButton(buttonId, button.tooltip, initialIcon, onClick, true, index);
+			this.createRibbonButton(buttonId, button.tooltip, initialIcon, onClick, true, index, loadUncachedIcon);
 		}
-
-		return buttonId;
 	}
 
 	/**
 	 * 创建分割线
 	 */
 	private createDivider(divider: DividerItem, index: number) {
-		try {
-			// @ts-ignore
-			const leftRibbon = this.app.workspace.leftRibbon;
-			
-			// 创建分割线元素
-			const dividerEl = document.createElement('div');
-			dividerEl.className = 'custom-ribbon-divider';
-			
-			// 存储数组索引信息
-			dividerEl.dataset.arrayIndex = index.toString();
-			
-			// 添加拖拽功能
-			this.makeDividerDraggable(dividerEl, divider.id, index);
-			
-			// 添加到缎带
-			const ribbonContainer = leftRibbon as any;
-			if (ribbonContainer.ribbonActionsEl) {
-				ribbonContainer.ribbonActionsEl.appendChild(dividerEl);
-			} else if (ribbonContainer.ribbonSettingEl) {
-				ribbonContainer.ribbonSettingEl.appendChild(dividerEl);
-			} else {
-				// 尝试找到正确的容器
-				const container = (ribbonContainer as any).children?.[0] || ribbonContainer;
-				container.appendChild(dividerEl);
-			}
-			this.ribbonMap.set(divider.id, dividerEl);
-			
-			return dividerEl;
-		} catch {
-			const fallbackEl = document.createElement('div');
-			fallbackEl.classList.add('custom-ribbon-hidden');
-			return fallbackEl;
+		const ribbonContainer = this.getRibbonContainer();
+		if (!ribbonContainer) {
+			return;
 		}
+
+		const dividerEl = document.createElement('div');
+		dividerEl.className = 'custom-ribbon-divider';
+		dividerEl.dataset.arrayIndex = index.toString();
+		this.makeRibbonItemDraggable(dividerEl, divider.id);
+		ribbonContainer.appendChild(dividerEl);
+		this.ribbonMap.set(divider.id, dividerEl);
 	}
 
 	/**
 	 * 处理按钮点击事件
 	 */
-	private handleButtonClick(button: CustomButton) {
+	private async activateCustomButton(buttonId: string, button: CustomButton): Promise<void> {
+		await this.toggleButtonIcon(buttonId);
+		await this.waitForSettingsWrites();
+		await this.handleButtonClick(button);
+	}
+
+	syncWorkspaceLayout(
+		leftRibbonItems: ButtonItem[],
+		pageHeaderItems: CustomButton[],
+		hideBuiltInButtons: boolean,
+	): void {
+		if (this.destroyed || this.layoutSyncScheduled) {
+			return;
+		}
+
+		this.layoutSyncScheduled = true;
+		this.scheduleAnimationFrame(() => {
+			this.layoutSyncScheduled = false;
+			const expectedRibbonItemCount = leftRibbonItems.length + (hideBuiltInButtons ? 3 : 0);
+			const ribbonWasRebuilt = this.ribbonMap.size !== expectedRibbonItemCount ||
+				Array.from(this.ribbonMap.values()).some(
+					(element) => !element.isConnected,
+			);
+
+			if (ribbonWasRebuilt) {
+				this.initVaultButtons(leftRibbonItems, pageHeaderItems, hideBuiltInButtons);
+				return;
+			}
+
+			this.app.workspace.iterateAllLeaves((leaf) => {
+				this.addButtonsToLeaf(leaf, pageHeaderItems);
+			});
+		});
+	}
+
+	refreshButtonIcons(iconName?: string, loadUncachedIcons = true): void {
+		if (this.destroyed) {
+			return;
+		}
+
+		for (const [buttonId, buttonConfig] of this.buttonConfigs.entries()) {
+			const currentIcon = (this.toggleStates.get(buttonId) || false)
+				? (buttonConfig.toggleIcon || buttonConfig.icon)
+				: buttonConfig.icon;
+			if (iconName && currentIcon !== iconName) {
+				continue;
+			}
+
+			for (const buttonEl of this.buttonElements.get(buttonId) ?? []) {
+				void this.setButtonIcon(buttonEl, currentIcon, loadUncachedIcons);
+			}
+		}
+	}
+
+	private async handleButtonClick(button: CustomButton): Promise<void> {
 		switch (button.type) {
 			case 'command':
 				if (button.command) {
@@ -227,7 +242,7 @@ export class ButtonManager {
 				break;
 			case 'command-group':
 				if (button.commands.length > 0) {
-					void this.executeCommandGroup(button.commands);
+					await this.executeCommandGroup(button.commands);
 				}
 				break;
 			case 'file':
@@ -237,7 +252,7 @@ export class ButtonManager {
 				break;
 			case 'url':
 				if (button.url) {
-					window.open(button.url, '_blank');
+					this.openUrl(button.url);
 				}
 				break;
 		}
@@ -251,11 +266,10 @@ export class ButtonManager {
 
 			try {
 				await Promise.resolve(
-					// @ts-ignore
-					this.app.commands.executeCommandById(commandId)
+					this.internalApp.commands.executeCommandById(commandId)
 				);
 			} catch {
-				// 单个命令失败时继续后续命令，避免整组中断
+				// 单个命令失败时继续后续命令, 避免整组中断
 			}
 		}
 	}
@@ -263,10 +277,16 @@ export class ButtonManager {
 	/**
 	 * 切换按钮图标
 	 */
-	private toggleButtonIcon(buttonId: string) {
+	private async toggleButtonIcon(buttonId: string): Promise<void> {
 		const buttonConfig = this.buttonConfigs.get(buttonId);
 		
 		if (!buttonConfig) return;
+
+		const primaryIcon = buttonConfig.icon;
+		const toggleIcon = buttonConfig.toggleIcon || primaryIcon;
+		if (primaryIcon === toggleIcon) {
+			return;
+		}
 
 		// 获取当前切换状态
 		const currentState = this.toggleStates.get(buttonId) || false;
@@ -276,27 +296,27 @@ export class ButtonManager {
 		
 		// 保存状态到按钮配置
 		buttonConfig.iconState = newState;
-		// 触发设置保存
-		this.onSettingsChange();
+		await this.onIconStateChange(buttonId, newState);
 
 		// 根据新状态选择图标
-		const newIcon = newState ? (buttonConfig.toggleIcon || buttonConfig.icon) : buttonConfig.icon;
+		const newIcon = newState ? toggleIcon : primaryIcon;
 
 		for (const buttonEl of this.buttonElements.get(buttonId) ?? []) {
-			buttonEl.querySelectorAll('svg, .custom-icon-svg').forEach((element) => element.remove());
 			void this.setButtonIcon(buttonEl, newIcon);
 		}
 	}
 
 	/**
-	 * 设置按钮图标（支持自定义图标）
+	 * 设置按钮图标 (支持自定义图标)
 	 */
-	private async setButtonIcon(buttonEl: HTMLElement, iconName: string) {
-		// 清空现有图标
-		buttonEl.querySelectorAll('svg, .custom-icon-svg').forEach((element) => element.remove());
-		
+	private async setButtonIcon(buttonEl: HTMLElement, iconName: string, loadUncachedIcon = true) {
 		if (this.customIconManager.isCustomIcon(iconName)) {
 			if (this.customIconManager.renderIconFromCache(iconName, buttonEl, this.shouldMaskCustomIcons())) {
+				return;
+			}
+
+			if (!loadUncachedIcon) {
+				setIcon(buttonEl, 'help-circle');
 				return;
 			}
 
@@ -313,10 +333,23 @@ export class ButtonManager {
 	 * 打开文件
 	 */
 	private openFile(filePath: string) {
-		const file = this.app.vault.getAbstractFileByPath(filePath);
-		if (file && file instanceof TFile) {
+		const file = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
+		if (file instanceof TFile) {
 			const leaf = this.app.workspace.getLeaf('tab');
-			leaf.openFile(file);
+			void leaf.openFile(file);
+		}
+	}
+
+	private openUrl(url: string) {
+		try {
+			const parsedUrl = new URL(url);
+			if (!['http:', 'https:', 'mailto:', 'obsidian:'].includes(parsedUrl.protocol)) {
+				return;
+			}
+
+			window.open(parsedUrl.toString(), '_blank', 'noopener,noreferrer');
+		} catch {
+			// 无效网址不执行任何操作.
 		}
 	}
 
@@ -327,60 +360,69 @@ export class ButtonManager {
 		id: string,
 		tooltip: string,
 		icon: string,
-		onClick: () => void,
+		onClick: () => void | Promise<void>,
 		draggable = false,
-		arrayIndex = -1
-	): HTMLElement {
-		try {
-			// @ts-ignore
-			const leftRibbon = this.app.workspace.leftRibbon;
-			
-			// 对于文件自定义图标，先创建一个占位图标
-			let displayIcon = icon;
-			if (this.customIconManager.isCustomIcon(icon)) {
-				displayIcon = 'help-circle';
-			}
-			
-			// @ts-ignore
-			const button = leftRibbon.makeRibbonItemButton(displayIcon, tooltip, (e: MouseEvent) => {
-				e.stopPropagation();
-				onClick();
-			});
-
-			if (this.customIconManager.isCustomIcon(icon)) {
-				if (!this.customIconManager.renderIconFromCache(icon, button, this.shouldMaskCustomIcons())) {
-					void this.setButtonIcon(button, icon);
-				}
-			}
-
-			// 存储数组索引信息
-			if (arrayIndex >= 0) {
-				button.dataset.arrayIndex = arrayIndex.toString();
-			}
-
-			if (draggable) {
-				this.makeButtonDraggable(button, id);
-			}
-
-			this.registerButtonElement(id, button);
-			this.ribbonMap.set(id, button);
-			// 添加到缎带
-			const ribbonContainer = leftRibbon as any;
-			if (ribbonContainer.ribbonActionsEl) {
-				ribbonContainer.ribbonActionsEl.appendChild(button);
-			} else if (ribbonContainer.ribbonSettingEl) {
-				ribbonContainer.ribbonSettingEl.appendChild(button);
-			} else {
-				// 尝试找到正确的容器
-				const container = (ribbonContainer as any).children?.[0] || ribbonContainer;
-				container.appendChild(button);
-			}
-			return button;
-		} catch {
-			const fallbackButton = document.createElement('div');
-			fallbackButton.classList.add('custom-ribbon-hidden');
-			return fallbackButton;
+		arrayIndex = -1,
+		loadUncachedIcon = true,
+	): void {
+		const leftRibbon = this.getLeftRibbon();
+		const ribbonContainer = this.getRibbonContainer(leftRibbon);
+		if (!leftRibbon || !ribbonContainer) {
+			return;
 		}
+
+		const isCustomIcon = this.customIconManager.isCustomIcon(icon);
+		const button = leftRibbon.makeRibbonItemButton(
+			isCustomIcon ? 'help-circle' : icon,
+			tooltip,
+			(event: MouseEvent) => {
+				event.stopPropagation();
+				void this.runRibbonAction(onClick).catch((error) => {
+					console.error('Custom Buttons ribbon action failed:', error);
+				});
+			},
+		);
+
+		if (
+			isCustomIcon &&
+			!this.customIconManager.renderIconFromCache(icon, button, this.shouldMaskCustomIcons()) &&
+			loadUncachedIcon
+		) {
+			void this.setButtonIcon(button, icon);
+		}
+
+		if (arrayIndex >= 0) {
+			button.dataset.arrayIndex = arrayIndex.toString();
+		}
+
+		if (draggable) {
+			button.classList.add('custom-ribbon-button');
+			this.makeRibbonItemDraggable(button, id);
+		}
+
+		this.registerButtonElement(id, button);
+		this.ribbonMap.set(id, button);
+		ribbonContainer.appendChild(button);
+	}
+
+	private getLeftRibbon(): InternalRibbon | null {
+		const workspace = this.app.workspace as typeof this.app.workspace & {
+			leftRibbon?: InternalRibbon;
+		};
+		return workspace.leftRibbon ?? null;
+	}
+
+	private get internalApp(): InternalApp {
+		return this.app as InternalApp;
+	}
+
+	private getRibbonContainer(leftRibbon = this.getLeftRibbon()): HTMLElement | null {
+		return leftRibbon?.ribbonActionsEl ?? leftRibbon?.ribbonSettingEl ?? null;
+	}
+
+	private async runRibbonAction(action: () => void | Promise<void>): Promise<void> {
+		await this.waitForSettingsWrites();
+		await action();
 	}
 
 	private registerButtonElement(id: string, element: HTMLElement) {
@@ -403,15 +445,15 @@ export class ButtonManager {
 		}
 	}
 
-	private addPageHeaderButtons(buttonItems: CustomButton[]) {
-		window.requestAnimationFrame(() => {
+	private addPageHeaderButtons(buttonItems: CustomButton[], loadUncachedIcons: boolean) {
+		this.scheduleAnimationFrame(() => {
 			this.app.workspace.iterateAllLeaves((leaf) => {
-				this.addButtonsToLeaf(leaf, buttonItems);
+				this.addButtonsToLeaf(leaf, buttonItems, loadUncachedIcons);
 			});
 		});
 	}
 
-	private addButtonsToLeaf(leaf: WorkspaceLeaf, buttonItems: CustomButton[]) {
+	private addButtonsToLeaf(leaf: WorkspaceLeaf, buttonItems: CustomButton[], loadUncachedIcons = true) {
 		const { view } = leaf;
 		if (!(view instanceof ItemView)) {
 			return;
@@ -420,6 +462,13 @@ export class ButtonManager {
 		const buttons = this.buttonsFor(view, true);
 		if (!buttons) {
 			return;
+		}
+
+		for (const [buttonId, element] of buttons.entries()) {
+			if (!element.isConnected) {
+				this.unregisterButtonElement(buttonId, element);
+				buttons.delete(buttonId);
+			}
 		}
 
 		buttonItems.forEach((item, index) => {
@@ -435,15 +484,14 @@ export class ButtonManager {
 
 			const actionEl = view.addAction('help-circle', buttonConfig.tooltip, () => {
 				this.app.workspace.setActiveLeaf(leaf, { focus: true });
-				this.toggleButtonIcon(buttonId);
-				this.handleButtonClick(buttonConfig);
+				return this.activateCustomButton(buttonId, buttonConfig);
 			});
 
 			actionEl.addClass('basic-vault-page-header-button');
 			actionEl.dataset.arrayIndex = index.toString();
 			buttons.set(buttonId, actionEl);
 			this.registerButtonElement(buttonId, actionEl);
-			void this.setButtonIcon(actionEl, iconName);
+			void this.setButtonIcon(actionEl, iconName, loadUncachedIcons);
 		});
 	}
 
@@ -456,77 +504,106 @@ export class ButtonManager {
 	}
 
 	private removeButtonsFromAllLeaves() {
-		window.requestAnimationFrame(() => {
-			this.app.workspace.iterateAllLeaves((leaf) => {
-				if (!(leaf.view instanceof ItemView)) {
-					return;
-				}
+		this.app.workspace.iterateAllLeaves((leaf) => {
+			if (!(leaf.view instanceof ItemView)) {
+				return;
+			}
 
-				const buttons = this.buttonsFor(leaf.view);
-				if (!buttons) {
-					return;
-				}
+			const buttons = this.buttonsFor(leaf.view);
+			if (!buttons) {
+				return;
+			}
 
-				for (const [buttonId, element] of buttons.entries()) {
-					this.unregisterButtonElement(buttonId, element);
-					element.remove();
-				}
-				buttons.clear();
-			});
+			for (const [buttonId, element] of buttons.entries()) {
+				this.unregisterButtonElement(buttonId, element);
+				element.remove();
+			}
+			buttons.clear();
 		});
+	}
+
+	private scheduleAnimationFrame(callback: () => void) {
+		if (this.destroyed) {
+			return;
+		}
+
+		const frameId = window.requestAnimationFrame(() => {
+			this.scheduledAnimationFrames.delete(frameId);
+			if (!this.destroyed) {
+				callback();
+			}
+		});
+		this.scheduledAnimationFrames.add(frameId);
+	}
+
+	private cancelScheduledAnimationFrames() {
+		for (const frameId of this.scheduledAnimationFrames) {
+			window.cancelAnimationFrame(frameId);
+		}
+		this.scheduledAnimationFrames.clear();
+		this.layoutSyncScheduled = false;
 	}
 
 	/**
 	 * 使按钮可拖拽
 	 */
-	private makeButtonDraggable(button: HTMLElement, buttonId: string) {
-		button.setAttribute('draggable', 'true');
-		button.classList.add('custom-ribbon-button');
+	private makeRibbonItemDraggable(element: HTMLElement, itemId: string) {
+		element.setAttribute('draggable', 'true');
 
-		button.addEventListener('dragstart', (e) => {
+		element.addEventListener('dragstart', (event) => {
 			this.dragState.isDragging = true;
-			this.dragState.dragSource = buttonId;
-			button.classList.add('dragging');
-			e.dataTransfer!.effectAllowed = 'move';
-			e.dataTransfer!.setData('text/plain', buttonId);
+			this.dragState.dragSource = itemId;
+			element.classList.add('dragging');
+			if (event.dataTransfer) {
+				event.dataTransfer.effectAllowed = 'move';
+				event.dataTransfer.setData('text/plain', itemId);
+			}
 		});
 
-		button.addEventListener('dragend', (e) => {
+		element.addEventListener('dragend', () => {
 			this.dragState.isDragging = false;
 			this.dragState.dragSource = null;
-			button.classList.remove('dragging');
-			document.querySelectorAll('.custom-ribbon-button.drag-over').forEach(el => {
-				(el as HTMLElement).classList.remove('drag-over');
-			});
+			element.classList.remove('dragging');
+			this.clearRibbonDragOver();
 		});
 
-		button.addEventListener('dragover', (e) => {
-			if (this.dragState.isDragging && this.dragState.dragSource !== buttonId) {
-				e.preventDefault();
-				e.dataTransfer!.dropEffect = 'move';
-				button.classList.add('drag-over');
+		element.addEventListener('dragover', (event) => {
+			if (this.dragState.isDragging && this.dragState.dragSource !== itemId) {
+				event.preventDefault();
+				if (event.dataTransfer) {
+					event.dataTransfer.dropEffect = 'move';
+				}
+				element.classList.add('drag-over');
 			}
 		});
 
-		button.addEventListener('dragenter', (e) => {
-			if (this.dragState.isDragging && this.dragState.dragSource !== buttonId) {
-				e.preventDefault();
-				button.classList.add('drag-over');
+		element.addEventListener('dragenter', (event) => {
+			if (this.dragState.isDragging && this.dragState.dragSource !== itemId) {
+				event.preventDefault();
+				element.classList.add('drag-over');
 			}
 		});
 
-		button.addEventListener('dragleave', (e) => {
-			button.classList.remove('drag-over');
-		});
-
-		button.addEventListener('drop', (e) => {
-			e.preventDefault();
-			button.classList.remove('drag-over');
-
-			if (this.dragState.isDragging && this.dragState.dragSource && this.dragState.dragSource !== buttonId) {
-				this.handleReorderButtons(this.dragState.dragSource, buttonId);
+		element.addEventListener('dragleave', (event) => {
+			if (!element.contains(event.relatedTarget as Node)) {
+				element.classList.remove('drag-over');
 			}
 		});
+
+		element.addEventListener('drop', (event) => {
+			event.preventDefault();
+			element.classList.remove('drag-over');
+
+			if (this.dragState.isDragging && this.dragState.dragSource && this.dragState.dragSource !== itemId) {
+				this.handleReorderButtons(this.dragState.dragSource, itemId);
+			}
+		});
+	}
+
+	private clearRibbonDragOver(): void {
+		for (const element of this.ribbonMap.values()) {
+			element.classList.remove('drag-over');
+		}
 	}
 
 	/**
@@ -539,64 +616,14 @@ export class ButtonManager {
 		
 		if (!sourceElement || !targetElement) return;
 		
-		const sourceIndex = parseInt(sourceElement.dataset.arrayIndex || '-1');
-		const targetIndex = parseInt(targetElement.dataset.arrayIndex || '-1');
+		const sourceIndex = Number.parseInt(sourceElement.dataset.arrayIndex || '-1', 10);
+		const targetIndex = Number.parseInt(targetElement.dataset.arrayIndex || '-1', 10);
 		
 		if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return;
 
 		// 调用外部回调来处理数组重新排序
-		this.onReorderButtons(sourceIndex, targetIndex);
-	}
-
-	/**
-	 * 使分割线可拖拽
-	 */
-	private makeDividerDraggable(divider: HTMLElement, dividerId: string, arrayIndex: number) {
-		divider.setAttribute('draggable', 'true');
-
-		divider.addEventListener('dragstart', (e) => {
-			this.dragState.isDragging = true;
-			this.dragState.dragSource = dividerId;
-			divider.classList.add('dragging');
-			e.dataTransfer!.effectAllowed = 'move';
-			e.dataTransfer!.setData('text/plain', dividerId);
-		});
-
-		divider.addEventListener('dragend', (e) => {
-			this.dragState.isDragging = false;
-			this.dragState.dragSource = null;
-			divider.classList.remove('dragging');
-			document.querySelectorAll('.custom-ribbon-divider.drag-over').forEach(el => {
-				(el as HTMLElement).classList.remove('drag-over');
-			});
-		});
-
-		divider.addEventListener('dragover', (e) => {
-			if (this.dragState.isDragging && this.dragState.dragSource !== dividerId) {
-				e.preventDefault();
-				e.dataTransfer!.dropEffect = 'move';
-				divider.classList.add('drag-over');
-			}
-		});
-
-		divider.addEventListener('dragenter', (e) => {
-			if (this.dragState.isDragging && this.dragState.dragSource !== dividerId) {
-				e.preventDefault();
-				divider.classList.add('drag-over');
-			}
-		});
-
-		divider.addEventListener('dragleave', (e) => {
-			divider.classList.remove('drag-over');
-		});
-
-		divider.addEventListener('drop', (e) => {
-			e.preventDefault();
-			divider.classList.remove('drag-over');
-
-			if (this.dragState.isDragging && this.dragState.dragSource && this.dragState.dragSource !== dividerId) {
-				this.handleReorderButtons(this.dragState.dragSource, dividerId);
-			}
+		void this.onReorderButtons(sourceIndex, targetIndex).catch((error) => {
+			console.error('Custom Buttons failed to save ribbon order:', error);
 		});
 	}
 
@@ -605,10 +632,9 @@ export class ButtonManager {
 	 */
 	private executeCommand(commandId: string) {
 		try {
-			// @ts-ignore
-			this.app.commands.executeCommandById(commandId);
+			this.internalApp.commands.executeCommandById(commandId);
 		} catch {
-			// 命令执行失败，静默失败
+			// 命令执行失败, 静默失败
 		}
 	}
 
@@ -617,10 +643,9 @@ export class ButtonManager {
 	 */
 	private showVaultChooser() {
 		try {
-			// @ts-ignore
-			this.app.openVaultChooser();
+			this.internalApp.openVaultChooser();
 		} catch {
-			// 库选择器打开失败，静默失败
+			// 库选择器打开失败, 静默失败
 		}
 	}
 
@@ -629,10 +654,9 @@ export class ButtonManager {
 	 */
 	private showHelp() {
 		try {
-			// @ts-ignore
-			this.app.openHelp();
+			this.internalApp.openHelp();
 		} catch {
-			// 帮助打开失败，静默失败
+			// 帮助打开失败, 静默失败
 		}
 	}
 
@@ -641,10 +665,9 @@ export class ButtonManager {
 	 */
 	private showSettings() {
 		try {
-			// @ts-ignore
-			this.app.setting.open();
+			this.internalApp.setting.open();
 		} catch {
-			// 设置打开失败，静默失败
+			// 设置打开失败, 静默失败
 		}
 	}
 
@@ -674,6 +697,8 @@ export class ButtonManager {
 	 * 清理资源
 	 */
 	destroy() {
+		this.destroyed = true;
+		this.cancelScheduledAnimationFrames();
 		this.clearAllButtons();
 		document.body.classList.remove('crb-show-builtin');
 		document.body.classList.remove('crb-hide-default-actions');
