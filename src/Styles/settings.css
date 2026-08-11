@@ -63,12 +63,10 @@
   flex-shrink: 0;
 }
 
-/* 按钮设置项样式 - 复刻 custom-about-blank */
+/* 按钮设置项 */
 
 .basic-vault-button-setting {
   align-items: center;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 48px;
 }
 
 .basic-vault-button-setting .setting-item-info {
@@ -93,6 +91,21 @@
 .basic-vault-button-setting .setting-item-control {
   flex: none;
   margin-left: auto;
+}
+
+.basic-vault-button-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--input-height);
+  height: var(--input-height);
+  color: var(--text-muted);
+  border-radius: var(--radius-s);
+}
+
+.basic-vault-button-drag-handle:hover {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
 }
 
 .basic-vault-button-name-wrap {

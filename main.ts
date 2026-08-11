@@ -33,6 +33,7 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			this.app,
 			this.handleButtonIconStateChange.bind(this),
 			this.reorderButtons.bind(this),
+			this.initVaultButtons.bind(this),
 			this.waitForSettingsWrites.bind(this),
 			() => this.settings.iconMask
 		);
@@ -327,12 +328,10 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 	async reorderButtons(sourceIndex: number, targetIndex: number) {
 		if (sourceIndex === targetIndex) return;
 		
-		// 重新排序数组
 		const [movedItem] = this.settings.leftRibbonItems.splice(sourceIndex, 1);
+		if (!movedItem) return;
 		this.settings.leftRibbonItems.splice(targetIndex, 0, movedItem);
 		
-		// 保存设置并重新初始化按钮
 		await this.saveSettings();
-		this.initVaultButtons();
 	}
 }

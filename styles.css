@@ -75,12 +75,10 @@ body.crb-hide-default-actions .side-dock-actions {
   flex-shrink: 0;
 }
 
-/* 按钮设置项样式 - 复刻 custom-about-blank */
+/* 按钮设置项 */
 
 .basic-vault-button-setting {
   align-items: center;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 48px;
 }
 
 .basic-vault-button-setting .setting-item-info {
@@ -105,6 +103,21 @@ body.crb-hide-default-actions .side-dock-actions {
 .basic-vault-button-setting .setting-item-control {
   flex: none;
   margin-left: auto;
+}
+
+.basic-vault-button-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--input-height);
+  height: var(--input-height);
+  color: var(--text-muted);
+  border-radius: var(--radius-s);
+}
+
+.basic-vault-button-drag-handle:hover {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
 }
 
 .basic-vault-button-name-wrap {
@@ -552,49 +565,36 @@ body.crb-hide-default-actions .side-dock-actions {
   border-radius: 2px;
 }
 
-/* 拖拽排序样式 */
+/* Pointer Events 排序样式 */
 
-.draggable-setting.dragging {
-  opacity: 0.5;
+.custom-sort-handle {
+  cursor: grab;
 }
 
-.draggable-setting.drag-over {
-  outline: 2px dashed var(--interactive-accent);
-  outline-offset: -2px;
-  background-color: var(--background-modifier-hover) !important;
+.custom-sort-container.is-pointer-sorting {
+  user-select: none;
 }
 
-/* 拖拽中的按钮样式 */
-.custom-ribbon-button.dragging {
-  opacity: 0.5;
+.custom-sort-item.is-pointer-dragging {
+  z-index: 10;
+  opacity: 0.55;
 }
 
-.custom-ribbon-button.drag-over {
-  outline: 2px dashed var(--interactive-accent);
-  outline-offset: -2px;
-  background-color: var(--background-modifier-hover);
+.custom-sort-container.is-pointer-sorting .custom-sort-item:not(.is-pointer-dragging),
+.custom-sort-item.is-pointer-settling {
+  transition: translate 160ms cubic-bezier(0.25, 1, 0.5, 1), opacity 120ms ease;
 }
 
-/* 拖拽中的分割线样式 */
-.custom-ribbon-divider.dragging {
-  background-color: var(--background-modifier-hover);
-  border-radius: 2px;
+.custom-sort-container.is-pointer-sorting
+  .custom-sort-item.is-pointer-dragging:not(.is-pointer-settling) {
+  transition: opacity 120ms ease;
 }
 
-.custom-ribbon-divider.dragging::before {
-  opacity: 0.5;
-  transform: scale(0.95);
-}
-
-.custom-ribbon-divider.drag-over {
-  background-color: var(--background-modifier-hover);
-  border-radius: 2px;
-}
-
-.custom-ribbon-divider.drag-over::before {
-  height: 4px;
-  background-color: var(--divider-color);
-  opacity: 1;
+@media (prefers-reduced-motion: reduce) {
+  .custom-sort-container.is-pointer-sorting .custom-sort-item:not(.is-pointer-dragging),
+  .custom-sort-item.is-pointer-settling {
+    transition-duration: 0ms;
+  }
 }
 
 /* 自定义 SVG 图标与内置图标保持一致尺寸 */

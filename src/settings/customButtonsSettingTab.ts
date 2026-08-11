@@ -1,11 +1,12 @@
 import { App, Plugin, PluginSettingTab, Setting, SettingGroup, setIcon, setTooltip } from 'obsidian';
-import { ButtonItem, CustomButton, RibbonVaultButtonsSettings } from '../types';
+import { CustomButton, RibbonVaultButtonsSettings } from '../types';
 import { createCustomButton, createDivider } from '../settings';
 import { ButtonEditorModal } from '../modals/buttonEditorModal';
 import { ConfirmModal } from '../modals/confirmModal';
 import { getRegisteredCommands } from '../utils/commandRegistry';
 import { CustomIconManager } from '../utils/customIconManager';
 import { FolderSuggester } from '../utils/folderSuggester';
+import { PointerSortController, PointerSortItem } from '../utils/pointerSortController';
 
 type SettingsTabKey = RibbonVaultButtonsSettings['settingsTab'];
 type ButtonArea = Exclude<SettingsTabKey, 'general'>;
@@ -24,8 +25,7 @@ interface RibbonVaultButtonsPlugin extends Plugin {
 
 export class CustomButtonsSettingTab extends PluginSettingTab {
 	plugin: RibbonVaultButtonsPlugin;
-	private draggedIndex: number | null = null;
-	private draggedArea: ButtonArea | null = null;
+	private sortController: PointerSortController | null = null;
 	private commandNameById = new Map<string, string>();
 
 	icon: string = 'panel-left';
@@ -37,6 +37,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 
 	display(): void {
 		const { containerEl } = this;
+		this.destroySortController();
 		containerEl.empty();
 		containerEl.addClass('basic-vault-settings-root');
 		this.commandNameById.clear();
@@ -53,6 +54,11 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		const contentEl = scrollEl.createDiv({ cls: 'basic-vault-settings-content' });
 
 		this.renderActiveTab(contentEl);
+	}
+
+	hide(): void {
+		this.destroySortController();
+		super.hide();
 	}
 
 	private createTabButton(parentEl: HTMLElement, tab: SettingsTabKey, label: string) {
@@ -103,6 +109,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 
 		const items = this.getItems(area);
 		const itemsGroup = new SettingGroup(contentEl);
+		const sortableItems: PointerSortItem[] = [];
 
 		if (items.length === 0) {
 			itemsGroup.addSetting((setting) => {
@@ -113,15 +120,14 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		} else {
 			items.forEach((item, index) => {
 				if (item.type === 'divider') {
-					this.createDividerSetting(itemsGroup, index, 'left-ribbon');
+					this.createDividerSetting(itemsGroup, index, 'left-ribbon', sortableItems);
 					return;
 				}
 
-				this.createButtonSetting(itemsGroup, item, index, area);
+				this.createButtonSetting(itemsGroup, item, index, area, sortableItems);
 			});
 		}
 
-		// 添加按钮 - 复刻 custom-about-blank 的 add-setting 模式
 		itemsGroup.addSetting((addSetting) => {
 			addSetting.settingEl.addClass('basic-vault-item-add-setting');
 			addSetting.controlEl.addClass('basic-vault-item-add-container');
@@ -146,6 +152,22 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 				});
 			}
 		});
+
+		const groupItemsEl = sortableItems[0]?.element.parentElement;
+		if (sortableItems.length > 1 && groupItemsEl) {
+			this.sortController = new PointerSortController({
+				containerEl: groupItemsEl,
+				items: sortableItems,
+				scrollEl: contentEl.parentElement ?? contentEl,
+				onReorder: (sourceIndex, targetIndex) =>
+					this.reorderItems(area, sourceIndex, targetIndex),
+				onSettled: () => {
+					this.plugin.initVaultButtons();
+					this.display();
+				},
+				onError: (error) => console.error('Failed to reorder settings items', error),
+			});
+		}
 	}
 
 	private createGlobalSettings(containerEl: HTMLElement) {
@@ -259,7 +281,13 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		await this.removeButtonItem(area, index);
 	}
 
-	private createButtonSetting(actionsGroup: SettingGroup, button: CustomButton, index: number, area: ButtonArea) {
+	private createButtonSetting(
+		actionsGroup: SettingGroup,
+		button: CustomButton,
+		index: number,
+		area: ButtonArea,
+		sortableItems: PointerSortItem[],
+	): void {
 		actionsGroup.addSetting((setting) => {
 			setting.settingEl.addClass('basic-vault-button-setting');
 			setting.settingEl.dataset.index = index.toString();
@@ -267,8 +295,6 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 			setting.setName(button.tooltip.trim() || '未命名按钮');
 			setting.setDesc(this.getButtonSummary(button));
 			this.decorateButtonName(setting, button);
-
-			this.makeDraggable(setting.settingEl, index, area);
 
 			setting
 				.addExtraButton((extraButton) => extraButton
@@ -284,7 +310,8 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 						void this.confirmRemoveItem(area, index);
 					}));
 
-			this.addDragHandle(setting, index, area);
+			const handle = this.addDragHandle(setting);
+			sortableItems.push({ key: `${area}:${index}`, element: setting.settingEl, handle });
 		});
 	}
 
@@ -389,7 +416,12 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		}
 	}
 
-	private createDividerSetting(actionsGroup: SettingGroup, index: number, area: Extract<ButtonArea, 'left-ribbon'>) {
+	private createDividerSetting(
+		actionsGroup: SettingGroup,
+		index: number,
+		area: Extract<ButtonArea, 'left-ribbon'>,
+		sortableItems: PointerSortItem[],
+	): void {
 		actionsGroup.addSetting((setting) => {
 			setting.settingEl.addClass('basic-vault-button-setting');
 			setting.settingEl.dataset.index = index.toString();
@@ -404,27 +436,18 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 					void this.confirmRemoveItem(area, index);
 				}));
 
-			this.makeDraggable(setting.settingEl, index, area);
-			this.addDragHandle(setting, index, area);
+			const handle = this.addDragHandle(setting);
+			sortableItems.push({ key: `${area}:${index}`, element: setting.settingEl, handle });
 		});
 	}
 
-	private addDragHandle(setting: Setting, index: number, area: ButtonArea) {
+	private addDragHandle(setting: Setting): HTMLElement {
 		const dragHandle = setting.controlEl.createDiv({
-			cls: 'drag-handle',
+			cls: 'basic-vault-button-drag-handle',
 			attr: { 'aria-label': '拖拽排序' }
 		});
 		setIcon(dragHandle, 'grip-vertical');
-
-		dragHandle.addEventListener('mousedown', () => {
-			setting.settingEl.setAttribute('draggable', 'true');
-			this.draggedIndex = index;
-			this.draggedArea = area;
-		});
-
-		dragHandle.addEventListener('mouseup', () => {
-			setting.settingEl.setAttribute('draggable', 'false');
-		});
+		return dragHandle;
 	}
 
 	private getCommandGroupSummary(commandIds: string[]): string {
@@ -447,71 +470,17 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		return this.commandNameById.get(commandId) || commandId;
 	}
 
-	private makeDraggable(element: HTMLElement, index: number, area: ButtonArea) {
-		element.setAttribute('draggable', 'false');
-		element.classList.add('draggable-setting');
-		element.dataset.index = index.toString();
-		element.dataset.area = area;
-
-		element.addEventListener('dragstart', (event) => {
-			this.draggedIndex = index;
-			this.draggedArea = area;
-			element.classList.add('dragging');
-			if (event.dataTransfer) {
-				event.dataTransfer.effectAllowed = 'move';
-				event.dataTransfer.setData('text/plain', `${area}:${index}`);
-			}
-		});
-
-		element.addEventListener('dragend', () => {
-			this.draggedIndex = null;
-			this.draggedArea = null;
-			element.classList.remove('dragging');
-			this.containerEl.querySelectorAll('.draggable-setting.drag-over').forEach((dragElement) => {
-				dragElement.classList.remove('drag-over');
-			});
-		});
-
-		element.addEventListener('dragover', (event) => {
-			if (this.draggedIndex !== null && this.draggedArea === area && this.draggedIndex !== index) {
-				event.preventDefault();
-				if (event.dataTransfer) {
-					event.dataTransfer.dropEffect = 'move';
-				}
-				element.classList.add('drag-over');
-			}
-		});
-
-		element.addEventListener('dragenter', (event) => {
-			if (this.draggedIndex !== null && this.draggedArea === area && this.draggedIndex !== index) {
-				event.preventDefault();
-				element.classList.add('drag-over');
-			}
-		});
-
-		element.addEventListener('dragleave', (event) => {
-			if (event.currentTarget === event.target || !element.contains(event.relatedTarget as Node)) {
-				element.classList.remove('drag-over');
-			}
-		});
-
-		element.addEventListener('drop', (event) => {
-			event.preventDefault();
-			element.classList.remove('drag-over');
-
-			if (this.draggedIndex !== null && this.draggedArea === area && this.draggedIndex !== index) {
-				void this.reorderItems(area, this.draggedIndex, index);
-			}
-		});
-	}
-
 	private async reorderItems(area: ButtonArea, fromIndex: number, toIndex: number) {
 		const items = this.getItems(area);
 		const [movedItem] = items.splice(fromIndex, 1);
-		items.splice(toIndex, 0, movedItem as ButtonItem & CustomButton);
+		if (!movedItem) return;
+		items.splice(toIndex, 0, movedItem);
 		await this.plugin.saveSettings();
-		this.plugin.initVaultButtons();
-		this.display();
+	}
+
+	private destroySortController(): void {
+		this.sortController?.destroy();
+		this.sortController = null;
 	}
 
 	private getItems(area: ButtonArea) {

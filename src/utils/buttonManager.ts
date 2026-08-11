@@ -1,6 +1,7 @@
 import { App, ItemView, TFile, WorkspaceLeaf, normalizePath, setIcon } from 'obsidian';
 import { CustomButton, ButtonItem, DividerItem } from '../types';
 import { CustomIconManager } from './customIconManager';
+import { PointerSortController, PointerSortItem } from './pointerSortController';
 
 interface InternalRibbon {
 	ribbonActionsEl?: HTMLElement;
@@ -24,14 +25,6 @@ interface InternalApp extends App {
 }
 
 /**
- * 拖拽状态
- */
-interface DragState {
-	isDragging: boolean;
-	dragSource: string | null;
-}
-
-/**
  * 按钮管理器类
  * 负责管理所有按钮的创建, 销毁和交互
  */
@@ -39,10 +32,7 @@ export class ButtonManager {
 	private ribbonMap = new Map<string, HTMLElement>();
 	private buttonElements = new Map<string, Set<HTMLElement>>();
 	private pageHeaderButtons = new WeakMap<ItemView, Map<string, HTMLElement>>();
-	private dragState: DragState = {
-		isDragging: false,
-		dragSource: null
-	};
+	private ribbonSortController: PointerSortController | null = null;
 	// 跟踪每个按钮的图标切换状态: true表示显示切换图标, false表示显示主图标
 	private toggleStates = new Map<string, boolean>();
 	// 存储按钮配置
@@ -57,6 +47,7 @@ export class ButtonManager {
 		private app: App,
 		private onIconStateChange: (buttonId: string, iconState: boolean) => Promise<void>,
 		private onReorderButtons: (sourceIndex: number, targetIndex: number) => Promise<void>,
+		private onRibbonReorderSettled: () => void,
 		private waitForSettingsWrites: () => Promise<void>,
 		private shouldMaskCustomIcons: () => boolean
 	) {
@@ -85,12 +76,15 @@ export class ButtonManager {
 		if (hideBuiltInButtons) {
 			this.initBuiltInButtons();
 		}
+		this.initRibbonSorting(leftRibbonItems);
 	}
 
 	/**
 	 * 清除所有按钮
 	 */
 	private clearAllButtons() {
+		this.ribbonSortController?.destroy();
+		this.ribbonSortController = null;
 		this.ribbonMap.forEach((value) => {
 			if (value && value.parentElement) {
 				value.remove();
@@ -109,7 +103,7 @@ export class ButtonManager {
 	private initLeftRibbonItems(buttonItems: ButtonItem[], loadUncachedIcons: boolean) {
 		buttonItems.forEach((item, index) => {
 			if (item.type === 'divider') {
-				this.createDivider(item, index);
+				this.createDivider(item);
 			} else {
 				this.createCustomButton(item, index, 'left', loadUncachedIcons);
 			}
@@ -155,14 +149,14 @@ export class ButtonManager {
 		const onClick = () => this.activateCustomButton(buttonId, button);
 
 		if (area === 'left') {
-			this.createRibbonButton(buttonId, button.tooltip, initialIcon, onClick, true, index, loadUncachedIcon);
+			this.createRibbonButton(buttonId, button.tooltip, initialIcon, onClick, true, loadUncachedIcon);
 		}
 	}
 
 	/**
 	 * 创建分割线
 	 */
-	private createDivider(divider: DividerItem, index: number) {
+	private createDivider(divider: DividerItem) {
 		const ribbonContainer = this.getRibbonContainer();
 		if (!ribbonContainer) {
 			return;
@@ -170,8 +164,6 @@ export class ButtonManager {
 
 		const dividerEl = document.createElement('div');
 		dividerEl.className = 'custom-ribbon-divider';
-		dividerEl.dataset.arrayIndex = index.toString();
-		this.makeRibbonItemDraggable(dividerEl, divider.id);
 		ribbonContainer.appendChild(dividerEl);
 		this.ribbonMap.set(divider.id, dividerEl);
 	}
@@ -361,8 +353,7 @@ export class ButtonManager {
 		tooltip: string,
 		icon: string,
 		onClick: () => void | Promise<void>,
-		draggable = false,
-		arrayIndex = -1,
+		sortable = false,
 		loadUncachedIcon = true,
 	): void {
 		const leftRibbon = this.getLeftRibbon();
@@ -376,6 +367,11 @@ export class ButtonManager {
 			isCustomIcon ? 'help-circle' : icon,
 			tooltip,
 			(event: MouseEvent) => {
+				if (sortable && this.ribbonSortController?.consumeSuppressedClick(id)) {
+					event.preventDefault();
+					event.stopPropagation();
+					return;
+				}
 				event.stopPropagation();
 				void this.runRibbonAction(onClick).catch((error) => {
 					console.error('Custom Buttons ribbon action failed:', error);
@@ -391,13 +387,8 @@ export class ButtonManager {
 			void this.setButtonIcon(button, icon);
 		}
 
-		if (arrayIndex >= 0) {
-			button.dataset.arrayIndex = arrayIndex.toString();
-		}
-
-		if (draggable) {
+		if (sortable) {
 			button.classList.add('custom-ribbon-button');
-			this.makeRibbonItemDraggable(button, id);
 		}
 
 		this.registerButtonElement(id, button);
@@ -488,7 +479,6 @@ export class ButtonManager {
 			});
 
 			actionEl.addClass('basic-vault-page-header-button');
-			actionEl.dataset.arrayIndex = index.toString();
 			buttons.set(buttonId, actionEl);
 			this.registerButtonElement(buttonId, actionEl);
 			void this.setButtonIcon(actionEl, iconName, loadUncachedIcons);
@@ -544,86 +534,27 @@ export class ButtonManager {
 		this.layoutSyncScheduled = false;
 	}
 
-	/**
-	 * 使按钮可拖拽
-	 */
-	private makeRibbonItemDraggable(element: HTMLElement, itemId: string) {
-		element.setAttribute('draggable', 'true');
+	private initRibbonSorting(buttonItems: ButtonItem[]): void {
+		const ribbonContainer = this.getRibbonContainer();
+		if (!ribbonContainer) return;
 
-		element.addEventListener('dragstart', (event) => {
-			this.dragState.isDragging = true;
-			this.dragState.dragSource = itemId;
-			element.classList.add('dragging');
-			if (event.dataTransfer) {
-				event.dataTransfer.effectAllowed = 'move';
-				event.dataTransfer.setData('text/plain', itemId);
-			}
+		const sortableItems: PointerSortItem[] = [];
+		buttonItems.forEach((item, index) => {
+			const key = item.type === 'divider' ? item.id : `left-${index}`;
+			const element = this.ribbonMap.get(key);
+			if (element) sortableItems.push({ key, element });
 		});
+		if (sortableItems.length < 2) return;
 
-		element.addEventListener('dragend', () => {
-			this.dragState.isDragging = false;
-			this.dragState.dragSource = null;
-			element.classList.remove('dragging');
-			this.clearRibbonDragOver();
-		});
-
-		element.addEventListener('dragover', (event) => {
-			if (this.dragState.isDragging && this.dragState.dragSource !== itemId) {
-				event.preventDefault();
-				if (event.dataTransfer) {
-					event.dataTransfer.dropEffect = 'move';
-				}
-				element.classList.add('drag-over');
-			}
-		});
-
-		element.addEventListener('dragenter', (event) => {
-			if (this.dragState.isDragging && this.dragState.dragSource !== itemId) {
-				event.preventDefault();
-				element.classList.add('drag-over');
-			}
-		});
-
-		element.addEventListener('dragleave', (event) => {
-			if (!element.contains(event.relatedTarget as Node)) {
-				element.classList.remove('drag-over');
-			}
-		});
-
-		element.addEventListener('drop', (event) => {
-			event.preventDefault();
-			element.classList.remove('drag-over');
-
-			if (this.dragState.isDragging && this.dragState.dragSource && this.dragState.dragSource !== itemId) {
-				this.handleReorderButtons(this.dragState.dragSource, itemId);
-			}
-		});
-	}
-
-	private clearRibbonDragOver(): void {
-		for (const element of this.ribbonMap.values()) {
-			element.classList.remove('drag-over');
-		}
-	}
-
-	/**
-	 * 处理按钮重新排序
-	 */
-	private handleReorderButtons(sourceId: string, targetId: string) {
-		// 通过存储的索引信息找到实际的数组索引
-		const sourceElement = this.ribbonMap.get(sourceId);
-		const targetElement = this.ribbonMap.get(targetId);
-		
-		if (!sourceElement || !targetElement) return;
-		
-		const sourceIndex = Number.parseInt(sourceElement.dataset.arrayIndex || '-1', 10);
-		const targetIndex = Number.parseInt(targetElement.dataset.arrayIndex || '-1', 10);
-		
-		if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return;
-
-		// 调用外部回调来处理数组重新排序
-		void this.onReorderButtons(sourceIndex, targetIndex).catch((error) => {
-			console.error('Custom Buttons failed to save ribbon order:', error);
+		this.ribbonSortController = new PointerSortController({
+			containerEl: ribbonContainer,
+			items: sortableItems,
+			scrollEl: ribbonContainer,
+			onReorder: this.onReorderButtons,
+			onSettled: this.onRibbonReorderSettled,
+			onError: (error) => {
+				console.error('Custom Buttons failed to save ribbon order:', error);
+			},
 		});
 	}
 
