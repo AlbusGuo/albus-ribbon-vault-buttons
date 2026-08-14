@@ -1,7 +1,11 @@
 import { App, normalizePath } from 'obsidian';
-import { LegacyCustomIcon } from '../types';
 import { CustomIconManager } from './customIconManager';
 import { sanitizeSvgContent } from './svgUtils';
+
+interface LegacyCustomIcon {
+	id: string;
+	content: string;
+}
 
 interface MigrationResult {
 	migratedData: unknown;

@@ -7,7 +7,6 @@
 
 # npm
 node_modules
-ref
 .history
 
 # Don't include the compiled main.js file in the repo.

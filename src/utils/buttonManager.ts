@@ -33,11 +33,8 @@ export class ButtonManager {
 	private buttonElements = new Map<string, Set<HTMLElement>>();
 	private pageHeaderButtons = new WeakMap<ItemView, Map<string, HTMLElement>>();
 	private ribbonSortController: PointerSortController | null = null;
-	// 跟踪每个按钮的图标切换状态: true表示显示切换图标, false表示显示主图标
 	private toggleStates = new Map<string, boolean>();
-	// 存储按钮配置
 	private buttonConfigs = new Map<string, CustomButton>();
-	// 自定义图标管理器
 	private customIconManager: CustomIconManager;
 	private scheduledAnimationFrames = new Set<number>();
 	private layoutSyncScheduled = false;
@@ -85,11 +82,7 @@ export class ButtonManager {
 	private clearAllButtons() {
 		this.ribbonSortController?.destroy();
 		this.ribbonSortController = null;
-		this.ribbonMap.forEach((value) => {
-			if (value && value.parentElement) {
-				value.remove();
-			}
-		});
+		this.ribbonMap.forEach((element) => element.remove());
 		this.removeButtonsFromAllLeaves();
 		this.ribbonMap.clear();
 		this.buttonElements.clear();
@@ -136,14 +129,11 @@ export class ButtonManager {
 	) {
 		const buttonId = `${area}-${index}`;
 		
-		// 存储按钮配置
 		this.buttonConfigs.set(buttonId, button);
-		
-		// 从settings恢复图标状态, 默认为false (显示主图标)
+
 		const savedState = button.iconState || false;
 		this.toggleStates.set(buttonId, savedState);
-		
-		// 根据保存的状态选择初始图标
+
 		const initialIcon = savedState ? (button.toggleIcon || button.icon) : button.icon;
 		
 		const onClick = () => this.activateCustomButton(buttonId, button);
@@ -280,17 +270,13 @@ export class ButtonManager {
 			return;
 		}
 
-		// 获取当前切换状态
 		const currentState = this.toggleStates.get(buttonId) || false;
-		// 切换状态
 		const newState = !currentState;
 		this.toggleStates.set(buttonId, newState);
-		
-		// 保存状态到按钮配置
+
 		buttonConfig.iconState = newState;
 		await this.onIconStateChange(buttonId, newState);
 
-		// 根据新状态选择图标
 		const newIcon = newState ? toggleIcon : primaryIcon;
 
 		for (const buttonEl of this.buttonElements.get(buttonId) ?? []) {
@@ -387,11 +373,7 @@ export class ButtonManager {
 			void this.setButtonIcon(button, icon);
 		}
 
-		if (sortable) {
-			button.classList.add('custom-ribbon-button');
-		}
-
-		this.registerButtonElement(id, button);
+		if (sortable) this.registerButtonElement(id, button);
 		this.ribbonMap.set(id, button);
 		ribbonContainer.appendChild(button);
 	}
@@ -468,14 +450,13 @@ export class ButtonManager {
 				return;
 			}
 
-			const buttonConfig = item;
 			const iconName = (this.toggleStates.get(buttonId) || false)
-				? (buttonConfig.toggleIcon || buttonConfig.icon)
-				: buttonConfig.icon;
+				? (item.toggleIcon || item.icon)
+				: item.icon;
 
-			const actionEl = view.addAction('help-circle', buttonConfig.tooltip, () => {
+			const actionEl = view.addAction('help-circle', item.tooltip, () => {
 				this.app.workspace.setActiveLeaf(leaf, { focus: true });
-				return this.activateCustomButton(buttonId, buttonConfig);
+				return this.activateCustomButton(buttonId, item);
 			});
 
 			actionEl.addClass('basic-vault-page-header-button');
@@ -504,10 +485,7 @@ export class ButtonManager {
 				return;
 			}
 
-			for (const [buttonId, element] of buttons.entries()) {
-				this.unregisterButtonElement(buttonId, element);
-				element.remove();
-			}
+			for (const element of buttons.values()) element.remove();
 			buttons.clear();
 		});
 	}
@@ -606,22 +584,14 @@ export class ButtonManager {
 	 * 应用样式设置 - 通过切换 body 类来控制 CSS 可见性
 	 */
 	applyStyleSettings(hideBuiltInButtons: boolean = true) {
-		if (hideBuiltInButtons) {
-			document.body.classList.remove('crb-show-builtin');
-		} else {
-			document.body.classList.add('crb-show-builtin');
-		}
+		document.body.classList.toggle('crb-show-builtin', !hideBuiltInButtons);
 	}
 
 	/**
 	 * 应用默认功能区样式设置 - 通过切换 body 类来控制 CSS 可见性
 	 */
 	applyDefaultActionsStyle(hideDefaultActions: boolean = false) {
-		if (hideDefaultActions) {
-			document.body.classList.add('crb-hide-default-actions');
-		} else {
-			document.body.classList.remove('crb-hide-default-actions');
-		}
+		document.body.classList.toggle('crb-hide-default-actions', hideDefaultActions);
 	}
 
 	/**
@@ -631,7 +601,6 @@ export class ButtonManager {
 		this.destroyed = true;
 		this.cancelScheduledAnimationFrames();
 		this.clearAllButtons();
-		document.body.classList.remove('crb-show-builtin');
-		document.body.classList.remove('crb-hide-default-actions');
+		document.body.classList.remove('crb-show-builtin', 'crb-hide-default-actions');
 	}
 }

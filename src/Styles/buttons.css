@@ -62,7 +62,7 @@
   background-color: var(--divider-color);
 }
 
-/* 拖拽时的视觉提示 */
+/* 分割线悬停样式 */
 .custom-ribbon-divider:hover {
   background-color: var(--background-modifier-hover);
   border-radius: 2px;

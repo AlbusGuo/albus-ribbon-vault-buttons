@@ -3,7 +3,7 @@ import { RibbonVaultButtonsSettings, CustomButton, DividerItem, ButtonItem } fro
 /**
  * 默认设置
  */
-export const DEFAULT_SETTINGS: RibbonVaultButtonsSettings = {
+const DEFAULT_SETTINGS: RibbonVaultButtonsSettings = {
 	leftRibbonItems: [],
 	pageHeaderItems: [],
 	iconFolder: '',
@@ -54,7 +54,7 @@ export function createDivider(): DividerItem {
 /**
  * 验证和清理设置
  */
-export function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonVaultButtonsSettings {
+function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonVaultButtonsSettings {
 	const leftRibbonItems = Array.isArray(settings.leftRibbonItems)
 		? settings.leftRibbonItems
 		: [];

@@ -60,10 +60,6 @@ export class ButtonEditorModal {
 		this.modal.open();
 	};
 
-	close = (): void => {
-		this.modal?.close();
-	};
-
 	private render = (): void => {
 		if (!this.contentEl) {
 			return;
@@ -100,7 +96,7 @@ export class ButtonEditorModal {
 		parentEl.createDiv({ cls: 'basic-vault-button-editor-label', text: label });
 		const fieldEl = parentEl.createDiv({ cls: 'basic-vault-button-editor-icon-field' });
 		const iconButton = fieldEl.createEl('button', {
-			cls: 'icon-picker-button-compact basic-vault-button-editor-icon-trigger',
+			cls: 'icon-picker-button-compact',
 			attr: { type: 'button', 'aria-label': label },
 		});
 		const previewEl = iconButton.createDiv({ cls: 'icon-picker-preview-compact' });
@@ -115,7 +111,7 @@ export class ButtonEditorModal {
 		setTooltip(iconButton, `${label}: ${this.customIconManager.getDisplayName(iconName || 'help-circle')}`);
 
 		iconButton.addEventListener('click', () => {
-			void this.openIconPicker(isToggleIcon);
+			this.openIconPicker(isToggleIcon);
 		});
 	}
 
@@ -170,7 +166,7 @@ export class ButtonEditorModal {
 
 		if (this.draft.type === 'command' || this.draft.type === 'file') {
 			this.valueInputEl.addEventListener('click', () => {
-				void this.openValuePicker();
+				this.openValuePicker();
 			});
 		}
 	}
@@ -202,7 +198,7 @@ export class ButtonEditorModal {
 				this.scheduleCommit();
 			});
 			inputEl.addEventListener('click', () => {
-				void this.openCommandGroupPicker(index, inputEl);
+				this.openCommandGroupPicker(index, inputEl);
 			});
 
 			this.createIconButton(rowEl, 'up-chevron-glyph', '上移', () => {
@@ -253,14 +249,13 @@ export class ButtonEditorModal {
 		});
 	}
 
-	private createIconButton(parentEl: HTMLElement, icon: string, label: string, onClick: () => void): HTMLButtonElement {
+	private createIconButton(parentEl: HTMLElement, icon: string, label: string, onClick: () => void): void {
 		const button = parentEl.createEl('button', {
 			cls: 'basic-vault-button-editor-icon-button',
 			attr: { type: 'button', 'aria-label': label, title: label },
 		});
 		setIcon(button, icon);
 		button.addEventListener('click', onClick);
-		return button;
 	}
 
 	private async commitChanges(): Promise<void> {
@@ -382,7 +377,7 @@ export class ButtonEditorModal {
 		}
 	}
 
-	private async openValuePicker(): Promise<void> {
+	private openValuePicker(): void {
 		if (this.draft.type === 'command') {
 			new CommandSuggestModal(this.app, (command) => {
 				this.draft.command = command.id;
@@ -405,7 +400,7 @@ export class ButtonEditorModal {
 		}
 	}
 
-	private async openCommandGroupPicker(index: number, inputEl: HTMLInputElement): Promise<void> {
+	private openCommandGroupPicker(index: number, inputEl: HTMLInputElement): void {
 		new CommandSuggestModal(this.app, (command) => {
 			this.draft.commands[index] = command.id;
 			inputEl.value = command.id;
@@ -413,8 +408,8 @@ export class ButtonEditorModal {
 		}).open();
 	}
 
-	private async openIconPicker(isToggleIcon: boolean): Promise<void> {
-		const modal = await IconSuggestModal.create(
+	private openIconPicker(isToggleIcon: boolean): void {
+		const modal = IconSuggestModal.create(
 			this.app,
 			this.options.iconFolder,
 			this.options.iconMask,

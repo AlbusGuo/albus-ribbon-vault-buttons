@@ -23,8 +23,5 @@
   },
   "include": [
     "**/*.ts"
-  ],
-  "exclude": [
-    "ref"
   ]
 }

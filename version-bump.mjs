@@ -2,13 +2,13 @@ import { readFileSync, writeFileSync } from "fs";
 
 const targetVersion = process.env.npm_package_version;
 
-// read minAppVersion from manifest.json and bump version to target version
+// Read minAppVersion from manifest.json and bump the manifest to the target version.
 const manifest = JSON.parse(readFileSync("manifest.json", "utf8"));
 const { minAppVersion } = manifest;
 manifest.version = targetVersion;
 writeFileSync("manifest.json", JSON.stringify(manifest, null, "\t"));
 
-// update versions.json with the target plugin version and its minAppVersion
+// Update versions.json with the target plugin version and its minAppVersion.
 const versions = JSON.parse(readFileSync('versions.json', 'utf8'));
 if (versions[targetVersion] !== minAppVersion) {
     versions[targetVersion] = minAppVersion;

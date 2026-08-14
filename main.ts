@@ -112,7 +112,7 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 	}
 
 	// =========================================================================
-	// 数据持久化 (参考 custom-about-blank 的白名单策略)
+	// 数据持久化
 	// =========================================================================
 
 	/**
@@ -139,7 +139,7 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 
 	/**
 	 * 保存设置
-	 * 
+	 *
 	 * 保存前始终通过 sanitizeSettingsShape 清理数据形状,
 	 * 快速连续的请求会合并, 并严格串行调用 Obsidian saveData.
 	 */

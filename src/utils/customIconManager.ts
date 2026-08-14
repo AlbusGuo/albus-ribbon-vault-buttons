@@ -9,7 +9,7 @@ interface CachedIcon {
 
 /**
  * 自定义图标管理器
- * 负责注册, 获取和渲染自定义SVG图标
+ * 负责注册, 获取和渲染自定义 SVG 图标
  */
 export class CustomIconManager {
 	static readonly FILE_PREFIX = 'custom-file:';
@@ -115,7 +115,7 @@ export class CustomIconManager {
 	/**
 	 * 获取指定图标文件夹内的 SVG 图标引用
 	 */
-	async getIconsFromFolder(folderPath: string): Promise<string[]> {
+	getIconsFromFolder(folderPath: string): string[] {
 		if (!folderPath || !this.app) {
 			return [];
 		}
@@ -335,7 +335,7 @@ export class CustomIconManager {
 	}
 
 	/**
-	 * 渲染自定义图标到DOM元素
+	 * 渲染自定义图标到 DOM 元素
 	 */
 	async renderIcon(iconName: string, containerEl: HTMLElement, masked = false): Promise<boolean> {
 		if (this.renderIconFromCache(iconName, containerEl, masked)) {

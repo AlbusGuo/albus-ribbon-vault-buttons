@@ -1,4 +1,4 @@
-/* NOTE: make any modifications to this file in src/Styles/styles.css */
+/* Note: Make all modifications to this source file. */
 
 /* 隐藏内置按钮区域 - 插件启用后默认生效, 通过 crb-show-builtin 类来取消隐藏 */
 body:not(.is-mobile):not(.crb-show-builtin) .workspace-split.mod-left-split .workspace-sidedock-vault-profile {
@@ -213,7 +213,7 @@ body.crb-hide-default-actions .side-dock-actions {
   }
 }
 
-/* 添加按钮区域 - 复刻 custom-about-blank 的 item-add 模式 */
+/* 添加按钮区域 */
 .basic-vault-item-add-setting {
   padding: 0;
   border-top: none;
@@ -559,7 +559,7 @@ body.crb-hide-default-actions .side-dock-actions {
   background-color: var(--divider-color);
 }
 
-/* 拖拽时的视觉提示 */
+/* 分割线悬停样式 */
 .custom-ribbon-divider:hover {
   background-color: var(--background-modifier-hover);
   border-radius: 2px;

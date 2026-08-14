@@ -9,7 +9,7 @@ export type ButtonType = 'command' | 'file' | 'url' | 'command-group';
 export interface DividerItem {
 	/** 类型标识 */
 	type: 'divider';
-	/** 分割线ID */
+	/** 分割线 ID */
 	id: string;
 }
 
@@ -25,7 +25,7 @@ export interface CustomButton {
 	tooltip: string;
 	/** 按钮类型 */
 	type: ButtonType;
-	/** 命令ID */
+	/** 命令 ID */
 	command: string;
 	/** 文件路径 */
 	file: string;
@@ -33,7 +33,7 @@ export interface CustomButton {
 	url: string;
 	/** 命令组, 按顺序依次执行 */
 	commands: string[];
-	/** 图标显示状态: true表示显示切换图标, false或undefined表示显示主图标 */
+	/** 图标显示状态: true 表示显示切换图标, false 或 undefined 表示显示主图标 */
 	iconState?: boolean;
 }
 
@@ -60,12 +60,4 @@ export interface RibbonVaultButtonsSettings {
 	hideDefaultActions: boolean;
 	/** 设置页当前标签 */
 	settingsTab: 'general' | 'left-ribbon' | 'page-header';
-}
-
-/**
- * 旧版内联自定义图标结构, 仅用于迁移
- */
-export interface LegacyCustomIcon {
-	id: string;
-	content: string;
 }

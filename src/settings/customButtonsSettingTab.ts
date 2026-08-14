@@ -290,8 +290,6 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 	): void {
 		actionsGroup.addSetting((setting) => {
 			setting.settingEl.addClass('basic-vault-button-setting');
-			setting.settingEl.dataset.index = index.toString();
-			setting.settingEl.dataset.area = area;
 			setting.setName(button.tooltip.trim() || '未命名按钮');
 			setting.setDesc(this.getButtonSummary(button));
 			this.decorateButtonName(setting, button);
@@ -424,8 +422,6 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 	): void {
 		actionsGroup.addSetting((setting) => {
 			setting.settingEl.addClass('basic-vault-button-setting');
-			setting.settingEl.dataset.index = index.toString();
-			setting.settingEl.dataset.area = area;
 			setting.setName('分割线');
 			setting.setDesc('用于分隔自定义按钮');
 
