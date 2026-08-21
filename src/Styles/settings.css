@@ -54,6 +54,10 @@
   padding-top: 16px;
 }
 
+.basic-vault-settings-content .setting-group + .setting-item-heading {
+  margin-top: 1.5em;
+}
+
 .basic-vault-settings-content .setting-item-control {
   flex-wrap: wrap;
   gap: 8px;

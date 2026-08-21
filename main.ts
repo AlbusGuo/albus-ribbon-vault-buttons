@@ -6,15 +6,19 @@ import { CustomButtonsSettingTab } from './src/settings/customButtonsSettingTab'
 import { CustomIconManager } from './src/utils/customIconManager';
 import { migrateLegacyCustomIcons } from './src/utils/legacyIconMigration';
 import { SettingsWriteQueue } from './src/utils/settingsWriteQueue';
+import { NoteToolbarManager } from './src/utils/noteToolbarManager';
+import { SelectionToolbarManager } from './src/utils/selectionToolbarManager';
 
 /**
- * Ribbon Vault Buttons 插件主类
- * 为 Obsidian 添加自定义底部侧边栏按钮功能
+ * Custom Buttons 插件主类
+ * 为 Obsidian 的侧边栏、标题栏和 Markdown 视图提供自定义按钮
  */
 export default class RibbonVaultButtonsPlugin extends Plugin {
 	settings: RibbonVaultButtonsSettings;
 	buttonManager: ButtonManager;
 	customIconManager: CustomIconManager;
+	private noteToolbarManager: NoteToolbarManager;
+	private selectionToolbarManager: SelectionToolbarManager;
 	private settingsWriteQueue: SettingsWriteQueue<RibbonVaultButtonsSettings>;
 	private buttonRefreshFrame: number | null = null;
 	private isUnloading = false;
@@ -37,6 +41,30 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			this.waitForSettingsWrites.bind(this),
 			() => this.settings.iconMask
 		);
+		this.noteToolbarManager = new NoteToolbarManager(
+			this.app,
+			(parentEl, button, index, loadUncachedIcon) =>
+				this.buttonManager.createContentToolbarButton(
+					parentEl,
+					button,
+					index,
+					'note',
+					loadUncachedIcon,
+				),
+		);
+		this.selectionToolbarManager = new SelectionToolbarManager(
+			this.app,
+			(parentEl, button, index, loadUncachedIcon) =>
+				this.buttonManager.createContentToolbarButton(
+					parentEl,
+					button,
+					index,
+					'selection',
+					loadUncachedIcon,
+				),
+		);
+		this.selectionToolbarManager.register(this);
+		this.registerEditorExtension(this.selectionToolbarManager.createEditorExtension());
 
 		this.buttonManager.applyStyleSettings(this.settings.hideBuiltInButtons);
 		this.buttonManager.applyDefaultActionsStyle(this.settings.hideDefaultActions);
@@ -49,6 +77,10 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 				this.settings.leftRibbonItems,
 				this.settings.pageHeaderItems,
 				this.settings.hideBuiltInButtons,
+			);
+			this.noteToolbarManager.sync(
+				this.settings.noteToolbarItems,
+				this.settings.noteToolbarPosition,
 			);
 		}));
 
@@ -84,6 +116,10 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 				this.settings.pageHeaderItems,
 				this.settings.hideBuiltInButtons,
 			);
+			this.noteToolbarManager.sync(
+				this.settings.noteToolbarItems,
+				this.settings.noteToolbarPosition,
+			);
 			void this.customIconManager
 				.preloadIcons(this.collectReferencedCustomIcons())
 				.then(() => {
@@ -107,6 +143,8 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			this.buttonRefreshFrame = null;
 		}
 		if (this.buttonManager) {
+			this.selectionToolbarManager?.destroy();
+			this.noteToolbarManager?.destroy();
 			this.buttonManager.destroy();
 		}
 	}
@@ -174,6 +212,14 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			collect(item.icon);
 			collect(item.toggleIcon || item.icon);
 		}
+		for (const item of this.settings.noteToolbarItems) {
+			collect(item.icon);
+			collect(item.toggleIcon || item.icon);
+		}
+		for (const item of this.settings.selectionToolbarItems) {
+			collect(item.icon);
+			collect(item.toggleIcon || item.icon);
+		}
 
 		return Array.from(iconNames);
 	}
@@ -188,9 +234,11 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			}
 		}
 
-		return this.settings.pageHeaderItems.some(
-			(item) => item.icon === iconReference || item.toggleIcon === iconReference,
-		);
+		return [
+			...this.settings.pageHeaderItems,
+			...this.settings.noteToolbarItems,
+			...this.settings.selectionToolbarItems,
+		].some((item) => item.icon === iconReference || item.toggleIcon === iconReference);
 	}
 
 	private async refreshCustomIcon(filePath: string): Promise<void> {
@@ -254,6 +302,8 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 
 		updateReferences(this.settings.leftRibbonItems);
 		updateReferences(this.settings.pageHeaderItems);
+		updateReferences(this.settings.noteToolbarItems);
+		updateReferences(this.settings.selectionToolbarItems);
 
 		for (const [oldReference, newReference] of replacedReferences) {
 			this.customIconManager.invalidateIcon(oldReference);
@@ -292,7 +342,19 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 		this.buttonManager.initVaultButtons(
 			this.settings.leftRibbonItems,
 			this.settings.pageHeaderItems,
+			this.settings.noteToolbarItems,
+			this.settings.selectionToolbarItems,
 			this.settings.hideBuiltInButtons,
+			loadUncachedIcons,
+		);
+		this.noteToolbarManager.renderAll(
+			this.settings.noteToolbarItems,
+			this.settings.noteToolbarPosition,
+			loadUncachedIcons,
+		);
+		this.selectionToolbarManager.setItems(
+			this.settings.selectionToolbarItems,
+			this.settings.selectionToolbarOnKeyboard,
 			loadUncachedIcons,
 		);
 	}
@@ -304,11 +366,20 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			return;
 		}
 
-		const item = area === 'left'
-			? this.settings.leftRibbonItems[index]
-			: area === 'page'
-				? this.settings.pageHeaderItems[index]
-				: null;
+		const item = (() => {
+			switch (area) {
+				case 'left':
+					return this.settings.leftRibbonItems[index];
+				case 'page':
+					return this.settings.pageHeaderItems[index];
+				case 'note':
+					return this.settings.noteToolbarItems[index];
+				case 'selection':
+					return this.settings.selectionToolbarItems[index];
+				default:
+					return null;
+			}
+		})();
 
 		if (!item || item.type === 'divider') {
 			return;

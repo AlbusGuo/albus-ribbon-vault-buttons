@@ -42,14 +42,24 @@ export interface CustomButton {
  */
 export type ButtonItem = CustomButton | DividerItem;
 
+export type NoteToolbarPosition = 'top-fixed' | 'bottom';
+
 /**
  * 插件设置接口
  */
 export interface RibbonVaultButtonsSettings {
 	/** 左侧边栏按钮项列表 (包含按钮和分割线) */
 	leftRibbonItems: ButtonItem[];
-	/** 页首按钮项列表 (仅按钮) */
+	/** 标题栏按钮项列表 (仅按钮) */
 	pageHeaderItems: CustomButton[];
+	/** 笔记工具栏按钮列表 */
+	noteToolbarItems: CustomButton[];
+	/** 选中文本工具栏按钮列表 */
+	selectionToolbarItems: CustomButton[];
+	/** 是否允许键盘选区触发选中文本工具栏 */
+	selectionToolbarOnKeyboard: boolean;
+	/** 笔记工具栏位置 */
+	noteToolbarPosition: NoteToolbarPosition;
 	/** SVG 图标文件夹, 用于过滤自定义图标 */
 	iconFolder: string;
 	/** 是否将自定义 SVG 图标强制渲染为 var(--icon-color) */
@@ -59,5 +69,5 @@ export interface RibbonVaultButtonsSettings {
 	/** 是否隐藏默认功能区 */
 	hideDefaultActions: boolean;
 	/** 设置页当前标签 */
-	settingsTab: 'general' | 'left-ribbon' | 'page-header';
+	settingsTab: 'general' | 'left-ribbon' | 'page-header' | 'note-toolbar' | 'selection-toolbar';
 }

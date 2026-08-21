@@ -47,7 +47,9 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 
 		this.createTabButton(tabsEl, 'general', '通用');
 		this.createTabButton(tabsEl, 'left-ribbon', '左侧边栏');
-		this.createTabButton(tabsEl, 'page-header', '页首');
+		this.createTabButton(tabsEl, 'page-header', '标题栏');
+		this.createTabButton(tabsEl, 'note-toolbar', '笔记工具栏');
+		this.createTabButton(tabsEl, 'selection-toolbar', '选中文本工具栏');
 
 		// 可滚动内容区域
 		const scrollEl = containerEl.createDiv({ cls: 'basic-vault-settings-scroll' });
@@ -93,6 +95,12 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 			case 'page-header':
 				this.renderButtonsTab(contentEl, 'page-header');
 				return;
+			case 'note-toolbar':
+				this.renderButtonsTab(contentEl, 'note-toolbar');
+				return;
+			case 'selection-toolbar':
+				this.renderButtonsTab(contentEl, 'selection-toolbar');
+				return;
 		}
 	}
 
@@ -107,6 +115,12 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 			);
 		}
 
+		if (area === 'note-toolbar') this.renderNoteToolbarPosition(contentEl);
+		if (area === 'selection-toolbar') this.renderSelectionToolbarOptions(contentEl);
+		if (area === 'note-toolbar' || area === 'selection-toolbar') {
+			new Setting(contentEl).setName('按钮').setHeading();
+		}
+
 		const items = this.getItems(area);
 		const itemsGroup = new SettingGroup(contentEl);
 		const sortableItems: PointerSortItem[] = [];
@@ -114,8 +128,10 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		if (items.length === 0) {
 			itemsGroup.addSetting((setting) => {
 				setting
-					.setName(area === 'left-ribbon' ? '还没有添加左侧边栏按钮' : '还没有添加页首按钮')
-					.setDesc(area === 'left-ribbon' ? '点击下方按钮开始创建左侧边栏按钮或分割线' : '点击下方按钮开始创建页首按钮');
+					.setName(`还没有添加${this.getAreaLabel(area)}按钮`)
+					.setDesc(area === 'left-ribbon'
+						? '点击下方按钮开始创建左侧边栏按钮或分割线'
+						: `点击下方按钮开始创建${this.getAreaLabel(area)}按钮`);
 			});
 		} else {
 			items.forEach((item, index) => {
@@ -168,6 +184,42 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 				onError: (error) => console.error('Failed to reorder settings items', error),
 			});
 		}
+	}
+
+	private renderNoteToolbarPosition(contentEl: HTMLElement): void {
+		const positionGroup = new SettingGroup(contentEl);
+		positionGroup.addSetting((setting) => {
+			setting
+				.setName('工具栏位置')
+				.setDesc('设置笔记工具栏在 Markdown 视图中的固定位置')
+				.addDropdown((dropdown) => dropdown
+					.addOption('top-fixed', '顶部')
+					.addOption('bottom', '底部')
+					.setValue(this.plugin.settings.noteToolbarPosition)
+					.onChange(async (value) => {
+						this.plugin.settings.noteToolbarPosition = value === 'bottom'
+							? 'bottom'
+							: 'top-fixed';
+						await this.plugin.saveSettings();
+						this.plugin.initVaultButtons();
+					}));
+		});
+	}
+
+	private renderSelectionToolbarOptions(contentEl: HTMLElement): void {
+		const optionsGroup = new SettingGroup(contentEl);
+		optionsGroup.addSetting((setting) => {
+			setting
+				.setName('键盘选区显示工具栏')
+				.setDesc('开启后, 使用键盘创建或调整文本选区时也会显示工具栏')
+				.addToggle((toggle) => toggle
+					.setValue(this.plugin.settings.selectionToolbarOnKeyboard)
+					.onChange(async (value) => {
+						this.plugin.settings.selectionToolbarOnKeyboard = value;
+						await this.plugin.saveSettings();
+						this.plugin.initVaultButtons();
+					}));
+		});
 	}
 
 	private createGlobalSettings(containerEl: HTMLElement) {
@@ -466,6 +518,19 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		return this.commandNameById.get(commandId) || commandId;
 	}
 
+	private getAreaLabel(area: ButtonArea): string {
+		switch (area) {
+			case 'left-ribbon':
+				return '左侧边栏';
+			case 'page-header':
+				return '标题栏';
+			case 'note-toolbar':
+				return '笔记工具栏';
+			case 'selection-toolbar':
+				return '选中文本工具栏';
+		}
+	}
+
 	private async reorderItems(area: ButtonArea, fromIndex: number, toIndex: number) {
 		const items = this.getItems(area);
 		const [movedItem] = items.splice(fromIndex, 1);
@@ -480,8 +545,15 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 	}
 
 	private getItems(area: ButtonArea) {
-		return area === 'left-ribbon'
-			? this.plugin.settings.leftRibbonItems
-			: this.plugin.settings.pageHeaderItems;
+		switch (area) {
+			case 'left-ribbon':
+				return this.plugin.settings.leftRibbonItems;
+			case 'page-header':
+				return this.plugin.settings.pageHeaderItems;
+			case 'note-toolbar':
+				return this.plugin.settings.noteToolbarItems;
+			case 'selection-toolbar':
+				return this.plugin.settings.selectionToolbarItems;
+		}
 	}
 }

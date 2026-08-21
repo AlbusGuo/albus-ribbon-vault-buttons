@@ -66,6 +66,10 @@ body.crb-hide-default-actions .side-dock-actions {
   padding-top: 16px;
 }
 
+.basic-vault-settings-content .setting-group + .setting-item-heading {
+  margin-top: 1.5em;
+}
+
 .basic-vault-settings-content .setting-item-control {
   flex-wrap: wrap;
   gap: 8px;
@@ -614,5 +618,113 @@ body.crb-hide-default-actions .side-dock-actions {
 	mask-position: center;
 	mask-repeat: no-repeat;
 	mask-image: var(--custom-icon-image);
+}
+
+/* 笔记工具栏和选中文本工具栏 */
+
+.basic-vault-note-toolbar {
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px var(--size-4-3);
+  overflow-x: auto;
+  background-color: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.basic-vault-note-toolbar.is-bottom {
+  position: absolute;
+  bottom: 4.25em;
+  left: max(0%, calc(50% - var(--basic-vault-note-toolbar-width, 0px) / 2));
+  z-index: calc(var(--layer-slides) - 1);
+  width: max-content;
+  max-width: 100%;
+  min-height: 0;
+  padding: 0 var(--size-4-8);
+  overflow: visible;
+  background: transparent;
+  border-top: 0;
+  border-bottom: 0;
+  border-radius: 5px;
+  visibility: hidden;
+}
+
+.basic-vault-note-toolbar.is-bottom.is-aligned {
+  visibility: visible;
+}
+
+.basic-vault-note-toolbar.is-bottom .basic-vault-content-toolbar-actions {
+  padding: 4px;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+  box-shadow: var(--shadow-s);
+}
+
+.basic-vault-content-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: max-content;
+}
+
+.basic-vault-content-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  color: var(--icon-color);
+  border: 0;
+  border-radius: var(--clickable-icon-radius);
+  background: transparent;
+}
+
+.basic-vault-content-toolbar-button:hover {
+  color: var(--icon-color-hover);
+  background-color: var(--background-modifier-hover);
+}
+
+.basic-vault-content-toolbar-button > :is(svg, .custom-icon-svg, .custom-icon-mask) {
+  width: var(--icon-size);
+  height: var(--icon-size);
+}
+
+.basic-vault-selection-toolbar {
+  box-sizing: border-box;
+  position: fixed;
+  top: var(--basic-vault-selection-toolbar-top, 0);
+  left: var(--basic-vault-selection-toolbar-left, 0);
+  z-index: var(--layer-popover, 1000);
+  display: flex;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+  overflow-x: auto;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(2px);
+  background-color: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-s);
+  transition: opacity 100ms ease, transform 100ms ease;
+}
+
+.basic-vault-selection-toolbar.is-visible {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .basic-vault-selection-toolbar {
+    transition-duration: 0ms;
+  }
 }
 

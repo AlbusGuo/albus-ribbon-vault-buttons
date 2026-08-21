@@ -6,6 +6,10 @@ import { RibbonVaultButtonsSettings, CustomButton, DividerItem, ButtonItem } fro
 const DEFAULT_SETTINGS: RibbonVaultButtonsSettings = {
 	leftRibbonItems: [],
 	pageHeaderItems: [],
+	noteToolbarItems: [],
+	selectionToolbarItems: [],
+	selectionToolbarOnKeyboard: false,
+	noteToolbarPosition: 'top-fixed',
 	iconFolder: '',
 	iconMask: false,
 	hideBuiltInButtons: true,
@@ -62,11 +66,22 @@ function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonV
 	const cleaned: RibbonVaultButtonsSettings = {
 		leftRibbonItems,
 		pageHeaderItems: Array.isArray(settings.pageHeaderItems) ? settings.pageHeaderItems : DEFAULT_SETTINGS.pageHeaderItems,
+		noteToolbarItems: Array.isArray(settings.noteToolbarItems) ? settings.noteToolbarItems : DEFAULT_SETTINGS.noteToolbarItems,
+		selectionToolbarItems: Array.isArray(settings.selectionToolbarItems) ? settings.selectionToolbarItems : DEFAULT_SETTINGS.selectionToolbarItems,
+		selectionToolbarOnKeyboard: typeof settings.selectionToolbarOnKeyboard === 'boolean'
+			? settings.selectionToolbarOnKeyboard
+			: DEFAULT_SETTINGS.selectionToolbarOnKeyboard,
+		noteToolbarPosition: settings.noteToolbarPosition === 'bottom' ? 'bottom' : DEFAULT_SETTINGS.noteToolbarPosition,
 		iconFolder: typeof settings.iconFolder === 'string' ? settings.iconFolder : DEFAULT_SETTINGS.iconFolder,
 		iconMask: typeof settings.iconMask === 'boolean' ? settings.iconMask : DEFAULT_SETTINGS.iconMask,
 		hideBuiltInButtons: typeof settings.hideBuiltInButtons === 'boolean' ? settings.hideBuiltInButtons : DEFAULT_SETTINGS.hideBuiltInButtons,
 		hideDefaultActions: typeof settings.hideDefaultActions === 'boolean' ? settings.hideDefaultActions : DEFAULT_SETTINGS.hideDefaultActions,
-		settingsTab: settings.settingsTab === 'left-ribbon' || settings.settingsTab === 'page-header' || settings.settingsTab === 'general'
+		settingsTab:
+			settings.settingsTab === 'left-ribbon' ||
+			settings.settingsTab === 'page-header' ||
+			settings.settingsTab === 'note-toolbar' ||
+			settings.settingsTab === 'selection-toolbar' ||
+			settings.settingsTab === 'general'
 			? settings.settingsTab
 			: DEFAULT_SETTINGS.settingsTab
 	};
@@ -130,6 +145,12 @@ function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonV
 	cleaned.pageHeaderItems = cleaned.pageHeaderItems
 		.map((item) => normalizeButton(item))
 		.filter((item): item is CustomButton => item !== null);
+	cleaned.noteToolbarItems = cleaned.noteToolbarItems
+		.map((item) => normalizeButton(item))
+		.filter((item): item is CustomButton => item !== null);
+	cleaned.selectionToolbarItems = cleaned.selectionToolbarItems
+		.map((item) => normalizeButton(item))
+		.filter((item): item is CustomButton => item !== null);
 
 	return cleaned;
 }
@@ -155,6 +176,18 @@ export function sanitizeSettingsShape(raw: unknown): RibbonVaultButtonsSettings 
 		pageHeaderItems: Array.isArray(data.pageHeaderItems)
 			? data.pageHeaderItems as CustomButton[]
 			: defaults.pageHeaderItems,
+		noteToolbarItems: Array.isArray(data.noteToolbarItems)
+			? data.noteToolbarItems as CustomButton[]
+			: defaults.noteToolbarItems,
+		selectionToolbarItems: Array.isArray(data.selectionToolbarItems)
+			? data.selectionToolbarItems as CustomButton[]
+			: defaults.selectionToolbarItems,
+		selectionToolbarOnKeyboard: typeof data.selectionToolbarOnKeyboard === 'boolean'
+			? data.selectionToolbarOnKeyboard
+			: defaults.selectionToolbarOnKeyboard,
+		noteToolbarPosition: data.noteToolbarPosition === 'bottom'
+			? 'bottom'
+			: defaults.noteToolbarPosition,
 		iconFolder: typeof data.iconFolder === 'string' ? data.iconFolder : defaults.iconFolder,
 		iconMask: typeof data.iconMask === 'boolean' ? data.iconMask : defaults.iconMask,
 		hideBuiltInButtons: typeof data.hideBuiltInButtons === 'boolean'
@@ -166,7 +199,9 @@ export function sanitizeSettingsShape(raw: unknown): RibbonVaultButtonsSettings 
 		settingsTab:
 			data.settingsTab === 'general' ||
 			data.settingsTab === 'left-ribbon' ||
-			data.settingsTab === 'page-header'
+			data.settingsTab === 'page-header' ||
+			data.settingsTab === 'note-toolbar' ||
+			data.settingsTab === 'selection-toolbar'
 				? data.settingsTab
 				: defaults.settingsTab,
 	});

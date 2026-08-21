@@ -1,4 +1,4 @@
-import { App, ItemView, TFile, WorkspaceLeaf, normalizePath, setIcon } from 'obsidian';
+import { App, ItemView, TFile, WorkspaceLeaf, normalizePath, setIcon, setTooltip } from 'obsidian';
 import { CustomButton, ButtonItem, DividerItem } from '../types';
 import { CustomIconManager } from './customIconManager';
 import { PointerSortController, PointerSortItem } from './pointerSortController';
@@ -57,6 +57,8 @@ export class ButtonManager {
 	initVaultButtons(
 		leftRibbonItems: ButtonItem[],
 		pageHeaderItems: CustomButton[],
+		noteToolbarItems: CustomButton[],
+		selectionToolbarItems: CustomButton[],
 		hideBuiltInButtons: boolean = true,
 		loadUncachedIcons = true,
 	) {
@@ -68,7 +70,9 @@ export class ButtonManager {
 
 		this.clearAllButtons();
 		this.initLeftRibbonItems(leftRibbonItems, loadUncachedIcons);
-		this.initPageHeaderItems(pageHeaderItems);
+		this.initCustomButtonItems(pageHeaderItems, 'page');
+		this.initCustomButtonItems(noteToolbarItems, 'note');
+		this.initCustomButtonItems(selectionToolbarItems, 'selection');
 		this.addPageHeaderButtons(pageHeaderItems, loadUncachedIcons);
 		if (hideBuiltInButtons) {
 			this.initBuiltInButtons();
@@ -103,9 +107,12 @@ export class ButtonManager {
 		});
 	}
 
-	private initPageHeaderItems(buttonItems: CustomButton[]) {
+	private initCustomButtonItems(
+		buttonItems: CustomButton[],
+		area: 'page' | 'note' | 'selection',
+	): void {
 		buttonItems.forEach((item, index) => {
-			this.createCustomButton(item, index, 'page');
+			this.createCustomButton(item, index, area);
 		});
 	}
 
@@ -124,7 +131,7 @@ export class ButtonManager {
 	private createCustomButton(
 		button: CustomButton,
 		index: number,
-		area: 'left' | 'page',
+		area: 'left' | 'page' | 'note' | 'selection',
 		loadUncachedIcon = true,
 	) {
 		const buttonId = `${area}-${index}`;
@@ -186,7 +193,7 @@ export class ButtonManager {
 			);
 
 			if (ribbonWasRebuilt) {
-				this.initVaultButtons(leftRibbonItems, pageHeaderItems, hideBuiltInButtons);
+				this.onRibbonReorderSettled();
 				return;
 			}
 
@@ -194,6 +201,37 @@ export class ButtonManager {
 				this.addButtonsToLeaf(leaf, pageHeaderItems);
 			});
 		});
+	}
+
+	createContentToolbarButton(
+		parentEl: HTMLElement,
+		button: CustomButton,
+		index: number,
+		area: 'note' | 'selection',
+		loadUncachedIcon = true,
+	): HTMLButtonElement {
+		const buttonId = `${area}-${index}`;
+		const iconName = (this.toggleStates.get(buttonId) || false)
+			? (button.toggleIcon || button.icon)
+			: button.icon;
+		const buttonEl = parentEl.createEl('button', {
+			cls: ['clickable-icon', 'basic-vault-content-toolbar-button'],
+			attr: { type: 'button', 'aria-label': button.tooltip },
+		});
+		setTooltip(buttonEl, button.tooltip);
+		if (area === 'selection') {
+			buttonEl.addEventListener('pointerdown', (event) => event.preventDefault());
+		}
+		buttonEl.addEventListener('click', (event) => {
+			event.stopPropagation();
+			void this.runRibbonAction(() => this.activateCustomButton(buttonId, button)).catch((error) => {
+				console.error('Custom Buttons toolbar action failed:', error);
+			});
+		});
+
+		this.registerButtonElement(buttonId, buttonEl);
+		void this.setButtonIcon(buttonEl, iconName, loadUncachedIcon);
+		return buttonEl;
 	}
 
 	refreshButtonIcons(iconName?: string, loadUncachedIcons = true): void {
