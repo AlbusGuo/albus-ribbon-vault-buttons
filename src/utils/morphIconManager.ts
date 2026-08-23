@@ -13,8 +13,6 @@ interface MorphElementState {
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const UNSUPPORTED_SVG_CONTENT = /<(?:defs|mask|clipPath|symbol|use|image|text|foreignObject|filter|linearGradient|radialGradient)\b/i;
 const TRANSFORM_ATTRIBUTE = /\btransform\s*=/i;
-const FILLED_GEOMETRY = /\bfill\s*=\s*["'](?!\s*none\s*["'])/i;
-const STANDARD_VIEW_BOX = /^0(?:\.0+)?\s+0(?:\.0+)?\s+24(?:\.0+)?\s+24(?:\.0+)?$/;
 
 export class MorphIconManager {
 	private readonly iconSources = new Map<string, IconInput | null>();
@@ -88,23 +86,25 @@ export class MorphIconManager {
 	private getIconSource(iconName: string, ownerDocument: Document): IconInput | null {
 		if (this.iconSources.has(iconName)) return this.iconSources.get(iconName) ?? null;
 
-		const svgEl = this.renderIconToSvg(iconName, ownerDocument);
-		if (!svgEl) return null;
+		const renderedSvgEl = this.renderIconToSvg(iconName, ownerDocument);
+		if (!renderedSvgEl) return null;
+		const svgEl = this.resolveGeometrySvg(renderedSvgEl);
+		if (!svgEl) {
+			this.iconSources.set(iconName, null);
+			return null;
+		}
 
 		try {
 			const markup = svgEl.outerHTML;
 			if (
 				UNSUPPORTED_SVG_CONTENT.test(markup) ||
-				TRANSFORM_ATTRIBUTE.test(markup) ||
-				FILLED_GEOMETRY.test(markup)
+				TRANSFORM_ATTRIBUTE.test(markup)
 			) {
 				this.iconSources.set(iconName, null);
 				return null;
 			}
 
-			const viewBox = svgEl.getAttribute('viewBox')?.trim();
-			if (viewBox && STANDARD_VIEW_BOX.test(viewBox)) svgEl.removeAttribute('viewBox');
-			const source = svgToIcon(svgEl.outerHTML);
+			const source = svgToIcon(markup);
 			this.iconSources.set(iconName, source);
 			return source;
 		} catch {
@@ -123,6 +123,22 @@ export class MorphIconManager {
 		return iconEl
 			? ownerDocument.importNode(iconEl, true) as SVGSVGElement
 			: null;
+	}
+
+	private resolveGeometrySvg(renderedSvgEl: SVGSVGElement): SVGSVGElement | null {
+		let sourceSvgEl = renderedSvgEl;
+		while (true) {
+			const nestedSvgEls = Array.from(sourceSvgEl.children).filter(
+				(child): child is SVGSVGElement => child.localName.toLowerCase() === 'svg',
+			);
+			if (nestedSvgEls.length === 0) break;
+			if (nestedSvgEls.length !== 1) return null;
+			const nestedSvgEl = nestedSvgEls[0];
+			if (!nestedSvgEl.getAttribute('viewBox')?.trim()) return null;
+			sourceSvgEl = nestedSvgEl;
+		}
+
+		return sourceSvgEl.cloneNode(true) as SVGSVGElement;
 	}
 
 	private createMorphSvg(containerEl: HTMLElement): SVGPathElement {
