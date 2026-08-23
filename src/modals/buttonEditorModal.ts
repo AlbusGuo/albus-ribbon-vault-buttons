@@ -1,22 +1,22 @@
 import { App, setIcon, setTooltip } from 'obsidian';
 import { CustomButton } from '../types';
-import { CustomIconManager } from '../utils/customIconManager';
 import { CommandSuggestModal } from './commandSuggestModal';
 import { EditorModal } from './editorModal';
 import { FileSuggestModal } from './fileSuggestModal';
 import { IconSuggestModal } from './iconSuggestModal';
+import { CustomIconsIntegration } from '../integrations/customIconsIntegration';
+import { MorphIconManager } from '../utils/morphIconManager';
 
 interface ButtonEditorModalOptions {
-	iconFolder: string;
-	iconMask: boolean;
+	customIconsIntegration: CustomIconsIntegration;
 	onChange: (button: CustomButton) => Promise<void>;
 	onClose?: () => void;
 }
 
 export class ButtonEditorModal {
 	private readonly app: App;
-	private readonly customIconManager: CustomIconManager;
 	private readonly options: ButtonEditorModalOptions;
+	private readonly previewMorphManager: MorphIconManager;
 	private readonly draft: CustomButton;
 	private modal: EditorModal | null = null;
 	private contentEl: HTMLDivElement | null = null;
@@ -33,7 +33,9 @@ export class ButtonEditorModal {
 		this.options = options;
 		this.draft = structuredClone(button);
 		this.lastCommittedState = JSON.stringify(this.draft);
-		this.customIconManager = CustomIconManager.getInstance(app);
+		this.previewMorphManager = new MorphIconManager(
+			(element, iconName) => this.options.customIconsIntegration.renderIcon(element, iconName),
+		);
 	}
 
 	open = (): void => {
@@ -65,6 +67,7 @@ export class ButtonEditorModal {
 			return;
 		}
 
+		this.previewMorphManager.clearElements();
 		this.contentEl.empty();
 
 		const nameControlEl = this.createFormRow(this.contentEl, '名称');
@@ -107,11 +110,11 @@ export class ButtonEditorModal {
 			this.primaryPreviewEl = previewEl;
 		}
 
-		void this.updateIconPreview(iconName, previewEl);
-		setTooltip(iconButton, `${label}: ${this.customIconManager.getDisplayName(iconName || 'help-circle')}`);
+		this.updateIconPreview(iconName, previewEl);
+		setTooltip(iconButton, `${label}: ${iconName || 'help-circle'}`);
 
 		iconButton.addEventListener('click', () => {
-			this.openIconPicker(isToggleIcon);
+			void this.openIconPicker(isToggleIcon, iconButton);
 		});
 	}
 
@@ -280,6 +283,7 @@ export class ButtonEditorModal {
 	}
 
 	private async finalizeClose(): Promise<void> {
+		this.previewMorphManager.destroy();
 		await this.commitChanges();
 		this.contentEl = null;
 		this.nameInputEl = null;
@@ -408,47 +412,81 @@ export class ButtonEditorModal {
 		}).open();
 	}
 
-	private openIconPicker(isToggleIcon: boolean): void {
+	private async openIconPicker(
+		isToggleIcon: boolean,
+		sourceEl: HTMLElement,
+	): Promise<void> {
+		const initialIcon = isToggleIcon ? this.draft.toggleIcon : this.draft.icon;
+		try {
+			const result = await this.options.customIconsIntegration.openIconPicker(
+				sourceEl,
+				initialIcon,
+			);
+			if (result.handled) {
+				if (result.icon) await this.applySelectedIcon(result.icon, isToggleIcon);
+				return;
+			}
+		} catch (error) {
+			console.error('Custom Buttons failed to open the Custom Icons picker:', error);
+		}
+
+		this.openDefaultIconPicker(isToggleIcon);
+	}
+
+	private openDefaultIconPicker(isToggleIcon: boolean): void {
 		const modal = IconSuggestModal.create(
 			this.app,
-			this.options.iconFolder,
-			this.options.iconMask,
-			async (selectedIcon: string) => {
-				if (isToggleIcon) {
-					this.draft.toggleIcon = selectedIcon;
-					if (this.togglePreviewEl) {
-						await this.updateIconPreview(selectedIcon, this.togglePreviewEl);
-					}
-					await this.commitChanges();
-					return;
-				}
-
-				this.draft.icon = selectedIcon;
-				this.draft.toggleIcon = selectedIcon;
-				if (this.primaryPreviewEl) {
-					await this.updateIconPreview(selectedIcon, this.primaryPreviewEl);
-				}
-				if (this.togglePreviewEl) {
-					await this.updateIconPreview(selectedIcon, this.togglePreviewEl);
-				}
-				await this.commitChanges();
+			(selectedIcon: string) => {
+				void this.applySelectedIcon(selectedIcon, isToggleIcon);
 			},
 		);
 		modal.open();
 	}
 
-	private async updateIconPreview(iconName: string, previewEl: HTMLElement): Promise<void> {
-		previewEl.empty();
-		if (this.customIconManager.isCustomIcon(iconName)) {
-			const rendered = await this.customIconManager.renderIcon(iconName, previewEl, this.options.iconMask);
-			if (!rendered) {
-				previewEl.setText('?');
+	private async applySelectedIcon(selectedIcon: string, isToggleIcon: boolean): Promise<void> {
+		if (isToggleIcon) {
+			const previousIcon = this.draft.toggleIcon || this.draft.icon;
+			this.draft.toggleIcon = selectedIcon;
+			if (this.togglePreviewEl) {
+				this.updateIconPreview(selectedIcon, this.togglePreviewEl, previousIcon);
 			}
+			await this.commitChanges();
 			return;
 		}
 
+		const previousPrimaryIcon = this.draft.icon;
+		const previousToggleIcon = this.draft.toggleIcon || previousPrimaryIcon;
+		this.draft.icon = selectedIcon;
+		this.draft.toggleIcon = selectedIcon;
+		if (this.primaryPreviewEl) {
+			this.updateIconPreview(selectedIcon, this.primaryPreviewEl, previousPrimaryIcon);
+		}
+		if (this.togglePreviewEl) {
+			this.updateIconPreview(selectedIcon, this.togglePreviewEl, previousToggleIcon);
+		}
+		await this.commitChanges();
+	}
+
+	private updateIconPreview(
+		iconName: string,
+		previewEl: HTMLElement,
+		previousIcon?: string,
+	): void {
+		if (
+			previousIcon &&
+			previousIcon !== iconName &&
+			this.previewMorphManager.transition(previewEl, previousIcon, iconName)
+		) {
+			return;
+		}
+
+		this.previewMorphManager.resetElement(previewEl);
+		previewEl.empty();
+		if (this.options.customIconsIntegration.renderIcon(previewEl, iconName)) return;
+
 		try {
 			setIcon(previewEl, iconName || 'help-circle');
+			if (!previewEl.querySelector('svg')) previewEl.setText('?');
 		} catch {
 			previewEl.setText('?');
 		}

@@ -1,5 +1,4 @@
 import { App, SuggestModal, setIcon, getIconIds } from 'obsidian';
-import { CustomIconManager } from '../utils/customIconManager';
 
 interface IconSuggestionItem {
 	value: string;
@@ -13,32 +12,23 @@ interface IconSuggestionItem {
 export class IconSuggestModal extends SuggestModal<IconSuggestionItem> {
 	private readonly icons: IconSuggestionItem[];
 	private readonly onChoose: (iconName: string) => void;
-	private readonly customIconManager: CustomIconManager;
-	private readonly masked: boolean;
 
-	constructor(app: App, icons: string[], masked: boolean, onChoose: (iconName: string) => void) {
+	constructor(app: App, icons: string[], onChoose: (iconName: string) => void) {
 		super(app);
 		this.onChoose = onChoose;
-		this.customIconManager = CustomIconManager.getInstance();
-		this.masked = masked;
 		this.icons = icons.map((icon) => {
-			const label = this.customIconManager.isCustomIcon(icon)
-				? this.customIconManager.getDisplayName(icon)
-				: icon;
 			return {
 				value: icon,
-				label,
-				searchText: label.toLowerCase(),
+				label: icon,
+				searchText: icon.toLowerCase(),
 			};
 		});
 		
 		this.setPlaceholder('搜索图标名称...');
 	}
 
-	static create(app: App, iconFolder: string, masked: boolean, onChoose: (iconName: string) => void): IconSuggestModal {
-		const customIconManager = CustomIconManager.getInstance(app);
-		const customIcons = customIconManager.getIconsFromFolder(iconFolder);
-		return new IconSuggestModal(app, [...customIcons, ...getIconIds()], masked, onChoose);
+	static create(app: App, onChoose: (iconName: string) => void): IconSuggestModal {
+		return new IconSuggestModal(app, getIconIds(), onChoose);
 	}
 
 	getSuggestions(query: string): IconSuggestionItem[] {
@@ -57,14 +47,11 @@ export class IconSuggestModal extends SuggestModal<IconSuggestionItem> {
 		el.createEl('div', { text: icon.label });
 
 		const previewEl = el.createEl('div');
-		if (this.customIconManager.isCustomIcon(icon.value)) {
-			void this.customIconManager.renderIcon(icon.value, previewEl, this.masked).then((rendered) => {
-				if (!rendered) {
-					setIcon(previewEl, 'help-circle');
-				}
-			});
-		} else {
+		try {
 			setIcon(previewEl, icon.value);
+			if (!previewEl.querySelector('svg')) setIcon(previewEl, 'help-circle');
+		} catch {
+			setIcon(previewEl, 'help-circle');
 		}
 	}
 

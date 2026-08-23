@@ -8,6 +8,7 @@ export interface PointerSortControllerOptions {
 	containerEl: HTMLElement;
 	items: PointerSortItem[];
 	scrollEl?: HTMLElement;
+	axis?: 'horizontal' | 'vertical';
 	onReorder: (sourceIndex: number, targetIndex: number) => void | Promise<void>;
 	onSettled?: () => void;
 	onError?: (error: unknown) => void;
@@ -20,7 +21,9 @@ interface PointerSortState {
 	currentIndex: number;
 	startClientX: number;
 	startClientY: number;
+	lastClientX: number;
 	lastClientY: number;
+	initialScrollLeft: number;
 	initialScrollTop: number;
 	items: PointerSortItem[];
 	rects: DOMRect[];
@@ -57,6 +60,15 @@ export class PointerSortController {
 				"pointerdown",
 				(event) => this.handlePointerDown(event, index),
 				{ signal: this.lifetimeAbort.signal },
+			);
+			item.element.addEventListener(
+				"click",
+				(event) => {
+					if (!this.consumeSuppressedClick(item.key)) return;
+					event.preventDefault();
+					event.stopImmediatePropagation();
+				},
+				{ capture: true, signal: this.lifetimeAbort.signal },
 			);
 		}
 	}
@@ -112,7 +124,9 @@ export class PointerSortController {
 			currentIndex: actualSourceIndex,
 			startClientX: event.clientX,
 			startClientY: event.clientY,
+			lastClientX: event.clientX,
 			lastClientY: event.clientY,
+			initialScrollLeft: this.scrollEl.scrollLeft,
 			initialScrollTop: this.scrollEl.scrollTop,
 			items,
 			rects: items.map((item) => item.element.getBoundingClientRect()),
@@ -148,6 +162,7 @@ export class PointerSortController {
 		const state = this.state;
 		if (!state || event.pointerId !== state.pointerId) return;
 
+		state.lastClientX = event.clientX;
 		state.lastClientY = event.clientY;
 		const distance = Math.hypot(
 			event.clientX - state.startClientX,
@@ -217,23 +232,36 @@ export class PointerSortController {
 		const state = this.state;
 		if (!state?.active) return;
 
-		const scrollDelta = this.scrollEl.scrollTop - state.initialScrollTop;
-		const pointerDelta = state.lastClientY - state.startClientY;
+		const horizontal = this.axis === 'horizontal';
+		const scrollDelta = horizontal
+			? this.scrollEl.scrollLeft - state.initialScrollLeft
+			: this.scrollEl.scrollTop - state.initialScrollTop;
+		const pointerDelta = horizontal
+			? state.lastClientX - state.startClientX
+			: state.lastClientY - state.startClientY;
 		const sourceRect = state.rects[state.sourceIndex];
 		if (!sourceRect) return;
 
-		const sourceCenter = sourceRect.top + sourceRect.height / 2 + pointerDelta;
+		const sourceStart = horizontal ? sourceRect.left : sourceRect.top;
+		const sourceSize = horizontal ? sourceRect.width : sourceRect.height;
+		const sourceCenter = sourceStart + sourceSize / 2 + pointerDelta;
 		let targetIndex = state.sourceIndex;
-		for (let index = 0; index < state.rects.length; index++) {
-			if (index === state.sourceIndex) continue;
-			const targetRect = state.rects[index];
-			if (!targetRect) continue;
-			const targetCenter = targetRect.top + targetRect.height / 2 - scrollDelta;
-			if (index < state.sourceIndex && sourceCenter < targetCenter) {
+		if (pointerDelta > 0) {
+			for (let index = state.sourceIndex + 1; index < state.rects.length; index++) {
+				const targetRect = state.rects[index];
+				if (!targetRect) continue;
+				const targetStart = horizontal ? targetRect.left : targetRect.top;
+				const targetSize = horizontal ? targetRect.width : targetRect.height;
+				if (sourceCenter <= targetStart + targetSize / 2 - scrollDelta) break;
 				targetIndex = index;
-				break;
 			}
-			if (index > state.sourceIndex && sourceCenter > targetCenter) {
+		} else if (pointerDelta < 0) {
+			for (let index = state.sourceIndex - 1; index >= 0; index--) {
+				const targetRect = state.rects[index];
+				if (!targetRect) continue;
+				const targetStart = horizontal ? targetRect.left : targetRect.top;
+				const targetSize = horizontal ? targetRect.width : targetRect.height;
+				if (sourceCenter >= targetStart + targetSize / 2 - scrollDelta) break;
 				targetIndex = index;
 			}
 		}
@@ -246,7 +274,7 @@ export class PointerSortController {
 
 		for (const [originalIndex, item] of state.items.entries()) {
 			if (originalIndex === state.sourceIndex) {
-				item.element.style.translate = `0 ${pointerDelta + scrollDelta}px`;
+				item.element.style.translate = this.getTranslate(pointerDelta + scrollDelta);
 				continue;
 			}
 
@@ -254,7 +282,10 @@ export class PointerSortController {
 			const originalRect = state.rects[originalIndex];
 			const targetRect = state.rects[virtualIndex];
 			if (!originalRect || !targetRect) continue;
-			item.element.style.translate = `0 ${targetRect.top - originalRect.top}px`;
+			const offset = horizontal
+				? targetRect.left - originalRect.left
+				: targetRect.top - originalRect.top;
+			item.element.style.translate = this.getTranslate(offset);
 		}
 	}
 
@@ -281,7 +312,10 @@ export class PointerSortController {
 		const sourceRect = state.rects[state.sourceIndex];
 		const targetRect = state.rects[state.currentIndex];
 		if (sourceRect && targetRect) {
-			sourceItem.element.style.translate = `0 ${targetRect.top - sourceRect.top}px`;
+			const offset = this.axis === 'horizontal'
+				? targetRect.left - sourceRect.left
+				: targetRect.top - sourceRect.top;
+			sourceItem.element.style.translate = this.getTranslate(offset);
 		}
 
 		const reorderedItems = [...state.items];
@@ -363,19 +397,32 @@ export class PointerSortController {
 			if (!state?.active) return;
 
 			const scrollRect = this.scrollEl.getBoundingClientRect();
+			const horizontal = this.axis === 'horizontal';
+			const pointerPosition = horizontal ? state.lastClientX : state.lastClientY;
+			const startEdge = horizontal ? scrollRect.left : scrollRect.top;
+			const endEdge = horizontal ? scrollRect.right : scrollRect.bottom;
 			let scrollStep = 0;
-			if (state.lastClientY < scrollRect.top + AUTO_SCROLL_EDGE) {
-				const ratio = (scrollRect.top + AUTO_SCROLL_EDGE - state.lastClientY) / AUTO_SCROLL_EDGE;
+			if (pointerPosition < startEdge + AUTO_SCROLL_EDGE) {
+				const ratio = (startEdge + AUTO_SCROLL_EDGE - pointerPosition) / AUTO_SCROLL_EDGE;
 				scrollStep = -AUTO_SCROLL_MAX_STEP * Math.min(1, ratio);
-			} else if (state.lastClientY > scrollRect.bottom - AUTO_SCROLL_EDGE) {
-				const ratio = (state.lastClientY - (scrollRect.bottom - AUTO_SCROLL_EDGE)) / AUTO_SCROLL_EDGE;
+			} else if (pointerPosition > endEdge - AUTO_SCROLL_EDGE) {
+				const ratio = (pointerPosition - (endEdge - AUTO_SCROLL_EDGE)) / AUTO_SCROLL_EDGE;
 				scrollStep = AUTO_SCROLL_MAX_STEP * Math.min(1, ratio);
 			}
 
 			if (scrollStep !== 0) {
-				const previousScrollTop = this.scrollEl.scrollTop;
-				this.scrollEl.scrollTop += scrollStep;
-				if (this.scrollEl.scrollTop !== previousScrollTop) this.updateVisualOrder();
+				const previousScrollPosition = horizontal
+					? this.scrollEl.scrollLeft
+					: this.scrollEl.scrollTop;
+				if (horizontal) {
+					this.scrollEl.scrollLeft += scrollStep;
+				} else {
+					this.scrollEl.scrollTop += scrollStep;
+				}
+				const nextScrollPosition = horizontal
+					? this.scrollEl.scrollLeft
+					: this.scrollEl.scrollTop;
+				if (nextScrollPosition !== previousScrollPosition) this.updateVisualOrder();
 			}
 
 			this.autoScrollFrame = this.win.requestAnimationFrame(tick);
@@ -414,6 +461,14 @@ export class PointerSortController {
 			item.element.removeAttribute("aria-grabbed");
 			item.element.style.translate = "";
 		}
+	}
+
+	private getTranslate(offset: number): string {
+		return this.axis === 'horizontal' ? `${offset}px 0` : `0 ${offset}px`;
+	}
+
+	private get axis(): 'horizontal' | 'vertical' {
+		return this.options.axis ?? 'vertical';
 	}
 
 	private get scrollEl(): HTMLElement {

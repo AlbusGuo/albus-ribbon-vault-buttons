@@ -1,6 +1,6 @@
 {
 	"name": "albus-custom-buttons",
-	"version": "2.2.0",
+	"version": "2.3.0",
 	"description": "A plugin to customize the ribbon and page header with custom buttons, dividers, and SVG icon support.",
 	"main": "main.js",
 	"scripts": {
@@ -24,5 +24,8 @@
 		"obsidian": "^1.12.0",
 		"tslib": "2.4.0",
 		"typescript": "5.7.3"
+	},
+	"dependencies": {
+		"morphicons": "1.7.0"
 	}
 }

@@ -155,54 +155,9 @@
   opacity: 1;
 }
 
-.basic-vault-button-name-icon-layer svg,
-.basic-vault-button-name-icon-layer .custom-icon-svg {
+.basic-vault-button-name-icon-layer svg {
   width: 16px;
   height: 16px;
-}
-
-.basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer.is-toggle {
-  opacity: 0;
-}
-
-.basic-vault-button-setting:is(:hover, :focus-within)
-  .basic-vault-button-name-icon.is-animated
-  .basic-vault-button-name-icon-layer.is-primary {
-  animation: basic-vault-button-icon-primary-fade 4s ease-in-out infinite;
-}
-
-.basic-vault-button-setting:is(:hover, :focus-within)
-  .basic-vault-button-name-icon.is-animated
-  .basic-vault-button-name-icon-layer.is-toggle {
-  animation: basic-vault-button-icon-toggle-fade 4s ease-in-out infinite;
-}
-
-@keyframes basic-vault-button-icon-primary-fade {
-  0%, 42% {
-    opacity: 1;
-  }
-
-  50%, 92% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
-@keyframes basic-vault-button-icon-toggle-fade {
-  0%, 42% {
-    opacity: 0;
-  }
-
-  50%, 92% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-  }
 }
 
 /* 添加按钮区域 */
@@ -475,14 +430,4 @@
     overflow-wrap: break-word;
   }
 
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer {
-    animation: none;
-  }
-
-  .basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer.is-toggle {
-    display: none;
-  }
 }

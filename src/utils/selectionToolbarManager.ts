@@ -1,6 +1,6 @@
 import { EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { App, Plugin } from 'obsidian';
-import { CustomButton } from '../types';
+import { ButtonItem, CustomButton } from '../types';
 
 interface SelectionRect {
 	left: number;
@@ -13,11 +13,10 @@ type SelectionToolbarButtonRenderer = (
 	parentEl: HTMLElement,
 	button: CustomButton,
 	index: number,
-	loadUncachedIcon: boolean,
 ) => HTMLElement;
 
 export class SelectionToolbarManager {
-	private items: CustomButton[] = [];
+	private items: ButtonItem[] = [];
 	private enabled = false;
 	private toolbarEl: HTMLElement | null = null;
 	private owner: 'editor' | null = null;
@@ -26,7 +25,6 @@ export class SelectionToolbarManager {
 	private pointerDown = false;
 	private selectionFromKeyboard = true;
 	private positionFrame: number | null = null;
-	private loadUncachedIcons = true;
 	private showOnKeyboard = false;
 
 	constructor(
@@ -68,14 +66,12 @@ export class SelectionToolbarManager {
 	}
 
 	setItems(
-		items: CustomButton[],
+		items: ButtonItem[],
 		showOnKeyboard: boolean,
-		loadUncachedIcons = true,
 	): void {
 		this.items = items;
-		this.enabled = items.length > 0;
+		this.enabled = items.some((item) => item.type !== 'divider');
 		this.showOnKeyboard = showOnKeyboard;
-		this.loadUncachedIcons = loadUncachedIcons;
 		this.pointerDown = false;
 		this.pendingEditorView = null;
 		this.selectionFromKeyboard = true;
@@ -252,8 +248,15 @@ export class SelectionToolbarManager {
 			attr: { role: 'toolbar', 'aria-label': '选中文本工具栏' },
 		});
 		const actionsEl = toolbarEl.createDiv({ cls: 'basic-vault-content-toolbar-actions' });
-		this.items.forEach((button, index) => {
-			this.renderButton(actionsEl, button, index, this.loadUncachedIcons);
+		this.items.forEach((item, index) => {
+			if (item.type === 'divider') {
+				actionsEl.createDiv({
+					cls: 'basic-vault-content-toolbar-divider',
+					attr: { role: 'separator' },
+				});
+				return;
+			}
+			this.renderButton(actionsEl, item, index);
 		});
 		this.toolbarEl = toolbarEl;
 		return toolbarEl;

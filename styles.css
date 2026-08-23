@@ -167,54 +167,9 @@ body.crb-hide-default-actions .side-dock-actions {
   opacity: 1;
 }
 
-.basic-vault-button-name-icon-layer svg,
-.basic-vault-button-name-icon-layer .custom-icon-svg {
+.basic-vault-button-name-icon-layer svg {
   width: 16px;
   height: 16px;
-}
-
-.basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer.is-toggle {
-  opacity: 0;
-}
-
-.basic-vault-button-setting:is(:hover, :focus-within)
-  .basic-vault-button-name-icon.is-animated
-  .basic-vault-button-name-icon-layer.is-primary {
-  animation: basic-vault-button-icon-primary-fade 4s ease-in-out infinite;
-}
-
-.basic-vault-button-setting:is(:hover, :focus-within)
-  .basic-vault-button-name-icon.is-animated
-  .basic-vault-button-name-icon-layer.is-toggle {
-  animation: basic-vault-button-icon-toggle-fade 4s ease-in-out infinite;
-}
-
-@keyframes basic-vault-button-icon-primary-fade {
-  0%, 42% {
-    opacity: 1;
-  }
-
-  50%, 92% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
-@keyframes basic-vault-button-icon-toggle-fade {
-  0%, 42% {
-    opacity: 0;
-  }
-
-  50%, 92% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-  }
 }
 
 /* 添加按钮区域 */
@@ -489,16 +444,6 @@ body.crb-hide-default-actions .side-dock-actions {
 
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer {
-    animation: none;
-  }
-
-  .basic-vault-button-name-icon.is-animated .basic-vault-button-name-icon-layer.is-toggle {
-    display: none;
-  }
-}
-
 /* 按钮相关样式 */
 
 /* 紧凑型图标选择器样式 */
@@ -601,25 +546,6 @@ body.crb-hide-default-actions .side-dock-actions {
   }
 }
 
-/* 自定义 SVG 图标与内置图标保持一致尺寸 */
-.custom-icon-svg {
-	width: 16px;
-	height: 16px;
-	display: block;
-}
-
-.custom-icon-mask {
-	background-color: var(--icon-color);
-	-webkit-mask-size: contain;
-	-webkit-mask-position: center;
-	-webkit-mask-repeat: no-repeat;
-	-webkit-mask-image: var(--custom-icon-image);
-	mask-size: contain;
-	mask-position: center;
-	mask-repeat: no-repeat;
-	mask-image: var(--custom-icon-image);
-}
-
 /* 笔记工具栏和选中文本工具栏 */
 
 .basic-vault-note-toolbar {
@@ -689,9 +615,17 @@ body.crb-hide-default-actions .side-dock-actions {
   background-color: var(--background-modifier-hover);
 }
 
-.basic-vault-content-toolbar-button > :is(svg, .custom-icon-svg, .custom-icon-mask) {
+.basic-vault-content-toolbar-button > svg {
   width: var(--icon-size);
   height: var(--icon-size);
+}
+
+.basic-vault-content-toolbar-divider {
+  flex: 0 0 1px;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background-color: var(--background-modifier-border);
 }
 
 .basic-vault-selection-toolbar {

@@ -17,9 +17,9 @@ export interface DividerItem {
  * 自定义按钮配置
  */
 export interface CustomButton {
-	/** 图标名称, 支持 Obsidian 内置图标或 custom-file: 前缀的 SVG 文件路径 */
+	/** 图标名称 */
 	icon: string;
-	/** 切换后的图标名称, 支持 Obsidian 内置图标或 custom-file: 前缀的 SVG 文件路径 */
+	/** 切换后的图标名称 */
 	toggleIcon: string;
 	/** 提示文字 */
 	tooltip: string;
@@ -53,17 +53,13 @@ export interface RibbonVaultButtonsSettings {
 	/** 标题栏按钮项列表 (仅按钮) */
 	pageHeaderItems: CustomButton[];
 	/** 笔记工具栏按钮列表 */
-	noteToolbarItems: CustomButton[];
+	noteToolbarItems: ButtonItem[];
 	/** 选中文本工具栏按钮列表 */
-	selectionToolbarItems: CustomButton[];
+	selectionToolbarItems: ButtonItem[];
 	/** 是否允许键盘选区触发选中文本工具栏 */
 	selectionToolbarOnKeyboard: boolean;
 	/** 笔记工具栏位置 */
 	noteToolbarPosition: NoteToolbarPosition;
-	/** SVG 图标文件夹, 用于过滤自定义图标 */
-	iconFolder: string;
-	/** 是否将自定义 SVG 图标强制渲染为 var(--icon-color) */
-	iconMask: boolean;
 	/** 是否隐藏内置按钮 */
 	hideBuiltInButtons: boolean;
 	/** 是否隐藏默认功能区 */

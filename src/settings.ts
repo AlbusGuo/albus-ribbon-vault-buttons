@@ -10,8 +10,6 @@ const DEFAULT_SETTINGS: RibbonVaultButtonsSettings = {
 	selectionToolbarItems: [],
 	selectionToolbarOnKeyboard: false,
 	noteToolbarPosition: 'top-fixed',
-	iconFolder: '',
-	iconMask: false,
 	hideBuiltInButtons: true,
 	hideDefaultActions: false,
 	settingsTab: 'general'
@@ -22,7 +20,11 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeIconName(iconName: unknown): string {
-	if (typeof iconName !== 'string' || iconName.length === 0) {
+	if (
+		typeof iconName !== 'string' ||
+		iconName.length === 0 ||
+		iconName.includes(':')
+	) {
 		return 'help-circle';
 	}
 
@@ -72,8 +74,6 @@ function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonV
 			? settings.selectionToolbarOnKeyboard
 			: DEFAULT_SETTINGS.selectionToolbarOnKeyboard,
 		noteToolbarPosition: settings.noteToolbarPosition === 'bottom' ? 'bottom' : DEFAULT_SETTINGS.noteToolbarPosition,
-		iconFolder: typeof settings.iconFolder === 'string' ? settings.iconFolder : DEFAULT_SETTINGS.iconFolder,
-		iconMask: typeof settings.iconMask === 'boolean' ? settings.iconMask : DEFAULT_SETTINGS.iconMask,
 		hideBuiltInButtons: typeof settings.hideBuiltInButtons === 'boolean' ? settings.hideBuiltInButtons : DEFAULT_SETTINGS.hideBuiltInButtons,
 		hideDefaultActions: typeof settings.hideDefaultActions === 'boolean' ? settings.hideDefaultActions : DEFAULT_SETTINGS.hideDefaultActions,
 		settingsTab:
@@ -122,35 +122,34 @@ function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonV
 	};
 
 	const usedRibbonIds = new Set(['vault', 'help', 'settings']);
-	cleaned.leftRibbonItems = cleaned.leftRibbonItems.flatMap<ButtonItem>((item): ButtonItem[] => {
-		if (item && typeof item === 'object' && !Array.isArray(item) && item.type === 'divider') {
-			const divider = item as Partial<DividerItem>;
-			let dividerId = typeof divider.id === 'string' && divider.id.length > 0
-				? divider.id
-				: createDivider().id;
-			while (usedRibbonIds.has(dividerId)) {
-				dividerId = createDivider().id;
+	const normalizeItems = (items: unknown[], usedIds: Set<string>): ButtonItem[] =>
+		items.flatMap<ButtonItem>((item): ButtonItem[] => {
+			if (isPlainObject(item) && item.type === 'divider') {
+				const divider = item as Partial<DividerItem>;
+				let dividerId = typeof divider.id === 'string' && divider.id.length > 0
+					? divider.id
+					: createDivider().id;
+				while (usedIds.has(dividerId)) {
+					dividerId = createDivider().id;
+				}
+				usedIds.add(dividerId);
+				return [{
+					type: 'divider' as const,
+					id: dividerId,
+				}];
 			}
-			usedRibbonIds.add(dividerId);
-			return [{
-				type: 'divider' as const,
-				id: dividerId,
-			}];
-		}
 
-		const button = normalizeButton(item);
-		return button ? [button] : [];
-	});
+			const button = normalizeButton(item);
+			return button ? [button] : [];
+		});
+
+	cleaned.leftRibbonItems = normalizeItems(cleaned.leftRibbonItems, usedRibbonIds);
 
 	cleaned.pageHeaderItems = cleaned.pageHeaderItems
 		.map((item) => normalizeButton(item))
 		.filter((item): item is CustomButton => item !== null);
-	cleaned.noteToolbarItems = cleaned.noteToolbarItems
-		.map((item) => normalizeButton(item))
-		.filter((item): item is CustomButton => item !== null);
-	cleaned.selectionToolbarItems = cleaned.selectionToolbarItems
-		.map((item) => normalizeButton(item))
-		.filter((item): item is CustomButton => item !== null);
+	cleaned.noteToolbarItems = normalizeItems(cleaned.noteToolbarItems, new Set());
+	cleaned.selectionToolbarItems = normalizeItems(cleaned.selectionToolbarItems, new Set());
 
 	return cleaned;
 }
@@ -177,10 +176,10 @@ export function sanitizeSettingsShape(raw: unknown): RibbonVaultButtonsSettings 
 			? data.pageHeaderItems as CustomButton[]
 			: defaults.pageHeaderItems,
 		noteToolbarItems: Array.isArray(data.noteToolbarItems)
-			? data.noteToolbarItems as CustomButton[]
+			? data.noteToolbarItems as ButtonItem[]
 			: defaults.noteToolbarItems,
 		selectionToolbarItems: Array.isArray(data.selectionToolbarItems)
-			? data.selectionToolbarItems as CustomButton[]
+			? data.selectionToolbarItems as ButtonItem[]
 			: defaults.selectionToolbarItems,
 		selectionToolbarOnKeyboard: typeof data.selectionToolbarOnKeyboard === 'boolean'
 			? data.selectionToolbarOnKeyboard
@@ -188,8 +187,6 @@ export function sanitizeSettingsShape(raw: unknown): RibbonVaultButtonsSettings 
 		noteToolbarPosition: data.noteToolbarPosition === 'bottom'
 			? 'bottom'
 			: defaults.noteToolbarPosition,
-		iconFolder: typeof data.iconFolder === 'string' ? data.iconFolder : defaults.iconFolder,
-		iconMask: typeof data.iconMask === 'boolean' ? data.iconMask : defaults.iconMask,
 		hideBuiltInButtons: typeof data.hideBuiltInButtons === 'boolean'
 			? data.hideBuiltInButtons
 			: defaults.hideBuiltInButtons,

@@ -1,7 +1,7 @@
 import { App, ItemView, TFile, WorkspaceLeaf, normalizePath, setIcon, setTooltip } from 'obsidian';
 import { CustomButton, ButtonItem, DividerItem } from '../types';
-import { CustomIconManager } from './customIconManager';
 import { PointerSortController, PointerSortItem } from './pointerSortController';
+import { MorphIconManager } from './morphIconManager';
 
 interface InternalRibbon {
 	ribbonActionsEl?: HTMLElement;
@@ -35,7 +35,7 @@ export class ButtonManager {
 	private ribbonSortController: PointerSortController | null = null;
 	private toggleStates = new Map<string, boolean>();
 	private buttonConfigs = new Map<string, CustomButton>();
-	private customIconManager: CustomIconManager;
+	private morphIconManager: MorphIconManager;
 	private scheduledAnimationFrames = new Set<number>();
 	private layoutSyncScheduled = false;
 	private destroyed = false;
@@ -46,9 +46,9 @@ export class ButtonManager {
 		private onReorderButtons: (sourceIndex: number, targetIndex: number) => Promise<void>,
 		private onRibbonReorderSettled: () => void,
 		private waitForSettingsWrites: () => Promise<void>,
-		private shouldMaskCustomIcons: () => boolean
+		private renderIntegratedIcon: (element: HTMLElement, iconName: string) => boolean
 	) {
-		this.customIconManager = CustomIconManager.getInstance(this.app);
+		this.morphIconManager = new MorphIconManager(this.renderIntegratedIcon);
 	}
 
 	/**
@@ -57,10 +57,9 @@ export class ButtonManager {
 	initVaultButtons(
 		leftRibbonItems: ButtonItem[],
 		pageHeaderItems: CustomButton[],
-		noteToolbarItems: CustomButton[],
-		selectionToolbarItems: CustomButton[],
+		noteToolbarItems: ButtonItem[],
+		selectionToolbarItems: ButtonItem[],
 		hideBuiltInButtons: boolean = true,
-		loadUncachedIcons = true,
 	) {
 		if (this.destroyed) {
 			return;
@@ -69,11 +68,11 @@ export class ButtonManager {
 		this.cancelScheduledAnimationFrames();
 
 		this.clearAllButtons();
-		this.initLeftRibbonItems(leftRibbonItems, loadUncachedIcons);
+		this.initLeftRibbonItems(leftRibbonItems);
 		this.initCustomButtonItems(pageHeaderItems, 'page');
-		this.initCustomButtonItems(noteToolbarItems, 'note');
-		this.initCustomButtonItems(selectionToolbarItems, 'selection');
-		this.addPageHeaderButtons(pageHeaderItems, loadUncachedIcons);
+		this.initToolbarButtonItems(noteToolbarItems, 'note');
+		this.initToolbarButtonItems(selectionToolbarItems, 'selection');
+		this.addPageHeaderButtons(pageHeaderItems);
 		if (hideBuiltInButtons) {
 			this.initBuiltInButtons();
 		}
@@ -84,6 +83,7 @@ export class ButtonManager {
 	 * 清除所有按钮
 	 */
 	private clearAllButtons() {
+		this.morphIconManager.clearElements();
 		this.ribbonSortController?.destroy();
 		this.ribbonSortController = null;
 		this.ribbonMap.forEach((element) => element.remove());
@@ -97,12 +97,12 @@ export class ButtonManager {
 	/**
 	 * 初始化按钮项 (包含按钮和分割线)
 	 */
-	private initLeftRibbonItems(buttonItems: ButtonItem[], loadUncachedIcons: boolean) {
+	private initLeftRibbonItems(buttonItems: ButtonItem[]) {
 		buttonItems.forEach((item, index) => {
 			if (item.type === 'divider') {
 				this.createDivider(item);
 			} else {
-				this.createCustomButton(item, index, 'left', loadUncachedIcons);
+				this.createCustomButton(item, index, 'left');
 			}
 		});
 	}
@@ -125,6 +125,15 @@ export class ButtonManager {
 		this.createRibbonButton('settings', '设置', 'settings', () => this.showSettings());
 	}
 
+	private initToolbarButtonItems(
+		buttonItems: ButtonItem[],
+		area: 'note' | 'selection',
+	): void {
+		buttonItems.forEach((item, index) => {
+			if (item.type !== 'divider') this.createCustomButton(item, index, area);
+		});
+	}
+
 	/**
 	 * 创建自定义按钮
 	 */
@@ -132,7 +141,6 @@ export class ButtonManager {
 		button: CustomButton,
 		index: number,
 		area: 'left' | 'page' | 'note' | 'selection',
-		loadUncachedIcon = true,
 	) {
 		const buttonId = `${area}-${index}`;
 		
@@ -146,7 +154,7 @@ export class ButtonManager {
 		const onClick = () => this.activateCustomButton(buttonId, button);
 
 		if (area === 'left') {
-			this.createRibbonButton(buttonId, button.tooltip, initialIcon, onClick, true, loadUncachedIcon);
+			this.createRibbonButton(buttonId, button.tooltip, initialIcon, onClick, true);
 		}
 	}
 
@@ -208,7 +216,6 @@ export class ButtonManager {
 		button: CustomButton,
 		index: number,
 		area: 'note' | 'selection',
-		loadUncachedIcon = true,
 	): HTMLButtonElement {
 		const buttonId = `${area}-${index}`;
 		const iconName = (this.toggleStates.get(buttonId) || false)
@@ -230,25 +237,22 @@ export class ButtonManager {
 		});
 
 		this.registerButtonElement(buttonId, buttonEl);
-		void this.setButtonIcon(buttonEl, iconName, loadUncachedIcon);
+		this.setButtonIcon(buttonEl, iconName);
 		return buttonEl;
 	}
 
-	refreshButtonIcons(iconName?: string, loadUncachedIcons = true): void {
+	refreshButtonIcons(): void {
 		if (this.destroyed) {
 			return;
 		}
+		this.morphIconManager.invalidate();
 
 		for (const [buttonId, buttonConfig] of this.buttonConfigs.entries()) {
 			const currentIcon = (this.toggleStates.get(buttonId) || false)
 				? (buttonConfig.toggleIcon || buttonConfig.icon)
 				: buttonConfig.icon;
-			if (iconName && currentIcon !== iconName) {
-				continue;
-			}
-
 			for (const buttonEl of this.buttonElements.get(buttonId) ?? []) {
-				void this.setButtonIcon(buttonEl, currentIcon, loadUncachedIcons);
+				this.setButtonIcon(buttonEl, currentIcon);
 			}
 		}
 	}
@@ -311,37 +315,32 @@ export class ButtonManager {
 		const currentState = this.toggleStates.get(buttonId) || false;
 		const newState = !currentState;
 		this.toggleStates.set(buttonId, newState);
-
-		buttonConfig.iconState = newState;
-		await this.onIconStateChange(buttonId, newState);
-
+		const previousIcon = currentState ? toggleIcon : primaryIcon;
 		const newIcon = newState ? toggleIcon : primaryIcon;
 
+		buttonConfig.iconState = newState;
+		const saveState = this.onIconStateChange(buttonId, newState);
+
 		for (const buttonEl of this.buttonElements.get(buttonId) ?? []) {
-			void this.setButtonIcon(buttonEl, newIcon);
+			if (!this.morphIconManager.transition(buttonEl, previousIcon, newIcon)) {
+				this.setButtonIcon(buttonEl, newIcon);
+			}
 		}
+
+		await saveState;
 	}
 
 	/**
 	 * 设置按钮图标 (支持自定义图标)
 	 */
-	private async setButtonIcon(buttonEl: HTMLElement, iconName: string, loadUncachedIcon = true) {
-		if (this.customIconManager.isCustomIcon(iconName)) {
-			if (this.customIconManager.renderIconFromCache(iconName, buttonEl, this.shouldMaskCustomIcons())) {
-				return;
-			}
-
-			if (!loadUncachedIcon) {
-				setIcon(buttonEl, 'help-circle');
-				return;
-			}
-
-			const rendered = await this.customIconManager.renderIcon(iconName, buttonEl, this.shouldMaskCustomIcons());
-			if (!rendered) {
-				setIcon(buttonEl, 'help-circle');
-			}
-		} else {
+	private setButtonIcon(buttonEl: HTMLElement, iconName: string): void {
+		this.morphIconManager.resetElement(buttonEl);
+		if (this.renderIntegratedIcon(buttonEl, iconName)) return;
+		try {
 			setIcon(buttonEl, iconName);
+			if (!buttonEl.querySelector('svg')) setIcon(buttonEl, 'help-circle');
+		} catch {
+			setIcon(buttonEl, 'help-circle');
 		}
 	}
 
@@ -378,7 +377,6 @@ export class ButtonManager {
 		icon: string,
 		onClick: () => void | Promise<void>,
 		sortable = false,
-		loadUncachedIcon = true,
 	): void {
 		const leftRibbon = this.getLeftRibbon();
 		const ribbonContainer = this.getRibbonContainer(leftRibbon);
@@ -386,9 +384,9 @@ export class ButtonManager {
 			return;
 		}
 
-		const isCustomIcon = this.customIconManager.isCustomIcon(icon);
+		const requiresDeferredIcon = icon.startsWith('CI-');
 		const button = leftRibbon.makeRibbonItemButton(
-			isCustomIcon ? 'help-circle' : icon,
+			requiresDeferredIcon ? 'help-circle' : icon,
 			tooltip,
 			(event: MouseEvent) => {
 				if (sortable && this.ribbonSortController?.consumeSuppressedClick(id)) {
@@ -403,13 +401,7 @@ export class ButtonManager {
 			},
 		);
 
-		if (
-			isCustomIcon &&
-			!this.customIconManager.renderIconFromCache(icon, button, this.shouldMaskCustomIcons()) &&
-			loadUncachedIcon
-		) {
-			void this.setButtonIcon(button, icon);
-		}
+		this.setButtonIcon(button, icon);
 
 		if (sortable) this.registerButtonElement(id, button);
 		this.ribbonMap.set(id, button);
@@ -456,15 +448,15 @@ export class ButtonManager {
 		}
 	}
 
-	private addPageHeaderButtons(buttonItems: CustomButton[], loadUncachedIcons: boolean) {
+	private addPageHeaderButtons(buttonItems: CustomButton[]) {
 		this.scheduleAnimationFrame(() => {
 			this.app.workspace.iterateAllLeaves((leaf) => {
-				this.addButtonsToLeaf(leaf, buttonItems, loadUncachedIcons);
+				this.addButtonsToLeaf(leaf, buttonItems);
 			});
 		});
 	}
 
-	private addButtonsToLeaf(leaf: WorkspaceLeaf, buttonItems: CustomButton[], loadUncachedIcons = true) {
+	private addButtonsToLeaf(leaf: WorkspaceLeaf, buttonItems: CustomButton[]) {
 		const { view } = leaf;
 		if (!(view instanceof ItemView)) {
 			return;
@@ -500,7 +492,7 @@ export class ButtonManager {
 			actionEl.addClass('basic-vault-page-header-button');
 			buttons.set(buttonId, actionEl);
 			this.registerButtonElement(buttonId, actionEl);
-			void this.setButtonIcon(actionEl, iconName, loadUncachedIcons);
+			this.setButtonIcon(actionEl, iconName);
 		});
 	}
 
@@ -639,6 +631,7 @@ export class ButtonManager {
 		this.destroyed = true;
 		this.cancelScheduledAnimationFrames();
 		this.clearAllButtons();
+		this.morphIconManager.destroy();
 		document.body.classList.remove('crb-show-builtin', 'crb-hide-default-actions');
 	}
 }

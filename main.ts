@@ -1,13 +1,12 @@
-import { normalizePath, Plugin, TFile, TFolder } from 'obsidian';
+import { Plugin } from 'obsidian';
 import { RibbonVaultButtonsSettings, ButtonItem } from './src/types';
 import { sanitizeSettingsShape } from './src/settings';
 import { ButtonManager } from './src/utils/buttonManager';
 import { CustomButtonsSettingTab } from './src/settings/customButtonsSettingTab';
-import { CustomIconManager } from './src/utils/customIconManager';
-import { migrateLegacyCustomIcons } from './src/utils/legacyIconMigration';
 import { SettingsWriteQueue } from './src/utils/settingsWriteQueue';
 import { NoteToolbarManager } from './src/utils/noteToolbarManager';
 import { SelectionToolbarManager } from './src/utils/selectionToolbarManager';
+import { CustomIconsIntegration } from './src/integrations/customIconsIntegration';
 
 /**
  * Custom Buttons 插件主类
@@ -16,22 +15,31 @@ import { SelectionToolbarManager } from './src/utils/selectionToolbarManager';
 export default class RibbonVaultButtonsPlugin extends Plugin {
 	settings: RibbonVaultButtonsSettings;
 	buttonManager: ButtonManager;
-	customIconManager: CustomIconManager;
+	customIconsIntegration: CustomIconsIntegration;
 	private noteToolbarManager: NoteToolbarManager;
 	private selectionToolbarManager: SelectionToolbarManager;
+	private settingTab: CustomButtonsSettingTab;
 	private settingsWriteQueue: SettingsWriteQueue<RibbonVaultButtonsSettings>;
 	private buttonRefreshFrame: number | null = null;
 	private isUnloading = false;
 
 	async onload() {
 		this.isUnloading = false;
-		this.customIconManager = CustomIconManager.getInstance(this.app);
-		this.customIconManager.setLegacyIconDirectory(normalizePath(`${this.pluginDirectory}/custom-icons`));
 		this.settingsWriteQueue = new SettingsWriteQueue(
 			(data) => this.saveData(data),
 		);
 
 		await this.loadSettings();
+		this.customIconsIntegration = new CustomIconsIntegration(
+			this.app,
+			this.manifest.id,
+			() => {
+				if (!this.isUnloading && this.buttonManager) {
+					this.buttonManager.refreshButtonIcons();
+					this.settingTab?.refreshIntegratedIconPreviews();
+				}
+			},
+		);
 
 		this.buttonManager = new ButtonManager(
 			this.app,
@@ -39,28 +47,28 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			this.reorderButtons.bind(this),
 			this.initVaultButtons.bind(this),
 			this.waitForSettingsWrites.bind(this),
-			() => this.settings.iconMask
+			(element, iconName) => this.customIconsIntegration.renderIcon(element, iconName)
 		);
 		this.noteToolbarManager = new NoteToolbarManager(
 			this.app,
-			(parentEl, button, index, loadUncachedIcon) =>
+			(parentEl, button, index) =>
 				this.buttonManager.createContentToolbarButton(
 					parentEl,
 					button,
 					index,
 					'note',
-					loadUncachedIcon,
 				),
+			this.reorderNoteToolbarItems.bind(this),
+			this.initVaultButtons.bind(this),
 		);
 		this.selectionToolbarManager = new SelectionToolbarManager(
 			this.app,
-			(parentEl, button, index, loadUncachedIcon) =>
+			(parentEl, button, index) =>
 				this.buttonManager.createContentToolbarButton(
 					parentEl,
 					button,
 					index,
 					'selection',
-					loadUncachedIcon,
 				),
 		);
 		this.selectionToolbarManager.register(this);
@@ -68,11 +76,14 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 
 		this.buttonManager.applyStyleSettings(this.settings.hideBuiltInButtons);
 		this.buttonManager.applyDefaultActionsStyle(this.settings.hideDefaultActions);
-		this.refreshVaultButtonsNow(false);
+		this.refreshVaultButtonsNow();
+		this.syncCustomIcons();
 
-		this.addSettingTab(new CustomButtonsSettingTab(this.app, this));
+		this.settingTab = new CustomButtonsSettingTab(this.app, this);
+		this.addSettingTab(this.settingTab);
 
 		this.registerEvent(this.app.workspace.on('layout-change', () => {
+			this.syncCustomIcons();
 			this.buttonManager.syncWorkspaceLayout(
 				this.settings.leftRibbonItems,
 				this.settings.pageHeaderItems,
@@ -82,28 +93,6 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 				this.settings.noteToolbarItems,
 				this.settings.noteToolbarPosition,
 			);
-		}));
-
-		this.registerEvent(this.app.vault.on('modify', (file) => {
-			if (file instanceof TFile && file.extension.toLowerCase() === 'svg') {
-				void this.refreshCustomIcon(file.path).catch((error) => {
-					console.error('Custom Buttons failed to refresh a modified icon:', error);
-				});
-			}
-		}));
-		this.registerEvent(this.app.vault.on('delete', (file) => {
-			if (file instanceof TFile && file.extension.toLowerCase() === 'svg') {
-				this.invalidateCustomIcon(file.path);
-			}
-		}));
-		this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
-			const isIconFile = file instanceof TFile &&
-				(file.extension.toLowerCase() === 'svg' || oldPath.toLowerCase().endsWith('.svg'));
-			if (isIconFile || file instanceof TFolder) {
-				void this.handleCustomIconRename(oldPath, file.path, file instanceof TFolder).catch((error) => {
-					console.error('Custom Buttons failed to save a renamed icon reference:', error);
-				});
-			}
 		}));
 
 		this.app.workspace.onLayoutReady(() => {
@@ -120,19 +109,7 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 				this.settings.noteToolbarItems,
 				this.settings.noteToolbarPosition,
 			);
-			void this.customIconManager
-				.preloadIcons(this.collectReferencedCustomIcons())
-				.then(() => {
-					if (!this.isUnloading) {
-						this.buttonManager.refreshButtonIcons();
-					}
-				})
-				.catch((error) => {
-					console.error('Custom Buttons failed to preload icons after layout became ready:', error);
-					if (!this.isUnloading) {
-						this.buttonManager.refreshButtonIcons();
-					}
-				});
+			this.syncCustomIcons();
 		});
 	}
 
@@ -147,6 +124,7 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			this.noteToolbarManager?.destroy();
 			this.buttonManager.destroy();
 		}
+		this.customIconsIntegration?.destroy();
 	}
 
 	// =========================================================================
@@ -158,20 +136,6 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 	 */
 	async loadSettings() {
 		const rawData = await this.loadData();
-		if (rawData && typeof rawData === 'object' && !Array.isArray(rawData)) {
-			const { migratedData, didMigrateLegacyIcons } = await migrateLegacyCustomIcons(
-				this.app,
-				rawData,
-				this.pluginDirectory,
-				this.customIconManager,
-			);
-			this.settings = sanitizeSettingsShape(migratedData);
-			if (didMigrateLegacyIcons) {
-				await this.saveSettings();
-			}
-			return;
-		}
-
 		this.settings = sanitizeSettingsShape(rawData);
 	}
 
@@ -184,140 +148,36 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 	async saveSettings() {
 		this.settings = sanitizeSettingsShape(this.settings);
 		await this.settingsWriteQueue.save(this.settings);
+		this.syncCustomIcons();
 	}
 
-	private get pluginDirectory(): string {
-		return this.manifest.dir ??
-			normalizePath(`${this.app.vault.configDir}/plugins/${this.manifest.id}`);
+	private syncCustomIcons(): void {
+		if (!this.customIconsIntegration) return;
+		void this.customIconsIntegration
+			.syncRequiredIcons(this.collectRequiredCustomIconIds())
+			.catch((error) => {
+				console.error('Custom Buttons failed to sync Custom Icons requirements:', error);
+			});
 	}
 
-	private collectReferencedCustomIcons(): string[] {
-		const iconNames = new Set<string>();
+	private collectRequiredCustomIconIds(): string[] {
+		const iconIds = new Set<string>();
 		const collect = (iconName: string): void => {
-			if (this.customIconManager.isCustomIcon(iconName)) {
-				iconNames.add(iconName);
-			}
+			if (iconName.startsWith('CI-')) iconIds.add(iconName);
 		};
-
-		for (const item of this.settings.leftRibbonItems) {
-			if (item.type === 'divider') {
-				continue;
-			}
-
-			collect(item.icon);
-			collect(item.toggleIcon || item.icon);
-		}
-
-		for (const item of this.settings.pageHeaderItems) {
-			collect(item.icon);
-			collect(item.toggleIcon || item.icon);
-		}
-		for (const item of this.settings.noteToolbarItems) {
-			collect(item.icon);
-			collect(item.toggleIcon || item.icon);
-		}
-		for (const item of this.settings.selectionToolbarItems) {
-			collect(item.icon);
-			collect(item.toggleIcon || item.icon);
-		}
-
-		return Array.from(iconNames);
-	}
-
-	private isCustomIconReferenced(iconReference: string): boolean {
-		for (const item of this.settings.leftRibbonItems) {
-			if (
-				item.type !== 'divider' &&
-				(item.icon === iconReference || item.toggleIcon === iconReference)
-			) {
-				return true;
-			}
-		}
-
-		return [
-			...this.settings.pageHeaderItems,
-			...this.settings.noteToolbarItems,
-			...this.settings.selectionToolbarItems,
-		].some((item) => item.icon === iconReference || item.toggleIcon === iconReference);
-	}
-
-	private async refreshCustomIcon(filePath: string): Promise<void> {
-		const iconReference = this.customIconManager.createIconReference(filePath);
-		const isReferenced = this.isCustomIconReferenced(iconReference);
-		if (!isReferenced && !this.customIconManager.hasCachedOrPendingIcon(iconReference)) {
-			return;
-		}
-
-		this.customIconManager.invalidateIcon(iconReference);
-		if (!isReferenced) {
-			return;
-		}
-
-		await this.customIconManager.preloadIcons([iconReference]);
-		this.buttonManager.refreshButtonIcons(iconReference);
-	}
-
-	private invalidateCustomIcon(filePath: string): void {
-		const iconReference = this.customIconManager.createIconReference(filePath);
-		const isReferenced = this.isCustomIconReferenced(iconReference);
-		if (!isReferenced && !this.customIconManager.hasCachedOrPendingIcon(iconReference)) {
-			return;
-		}
-
-		this.customIconManager.invalidateIcon(iconReference);
-		if (isReferenced) {
-			this.buttonManager.refreshButtonIcons(iconReference);
-		}
-	}
-
-	private async handleCustomIconRename(oldPath: string, newPath: string, isFolder: boolean): Promise<void> {
-		const normalizedOldPath = normalizePath(oldPath);
-		const normalizedNewPath = normalizePath(newPath);
-		const replacedReferences = new Map<string, string>();
-		let didChange = false;
-
-		const updateReferences = (items: ButtonItem[]): void => {
+		const collectItems = (items: ButtonItem[]): void => {
 			for (const item of items) {
-				if (item.type === 'divider') {
-					continue;
-				}
-
-				for (const property of ['icon', 'toggleIcon'] as const) {
-					const iconReference = item[property];
-					const filePath = this.customIconManager.getFilePath(iconReference);
-					const isRenamedPath = filePath === normalizedOldPath ||
-						(isFolder && filePath?.startsWith(`${normalizedOldPath}/`));
-					if (!filePath || !isRenamedPath) {
-						continue;
-					}
-
-					const renamedPath = `${normalizedNewPath}${filePath.slice(normalizedOldPath.length)}`;
-					const newReference = this.customIconManager.createIconReference(renamedPath);
-					item[property] = newReference;
-					replacedReferences.set(iconReference, newReference);
-					didChange = true;
-				}
+				if (item.type === 'divider') continue;
+				collect(item.icon);
+				collect(item.toggleIcon || item.icon);
 			}
 		};
 
-		updateReferences(this.settings.leftRibbonItems);
-		updateReferences(this.settings.pageHeaderItems);
-		updateReferences(this.settings.noteToolbarItems);
-		updateReferences(this.settings.selectionToolbarItems);
-
-		for (const [oldReference, newReference] of replacedReferences) {
-			this.customIconManager.invalidateIcon(oldReference);
-			if (this.customIconManager.hasCachedOrPendingIcon(newReference)) {
-				this.customIconManager.invalidateIcon(newReference);
-			}
-		}
-		if (!didChange) {
-			return;
-		}
-
-		await this.customIconManager.preloadIcons(Array.from(replacedReferences.values()));
-		await this.saveSettings();
-		this.initVaultButtons();
+		collectItems(this.settings.leftRibbonItems);
+		collectItems(this.settings.pageHeaderItems);
+		collectItems(this.settings.noteToolbarItems);
+		collectItems(this.settings.selectionToolbarItems);
+		return Array.from(iconIds).sort();
 	}
 
 	/**
@@ -334,7 +194,7 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 		});
 	}
 
-	private refreshVaultButtonsNow(loadUncachedIcons = true): void {
+	private refreshVaultButtonsNow(): void {
 		if (!this.buttonManager) {
 			return;
 		}
@@ -345,17 +205,14 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			this.settings.noteToolbarItems,
 			this.settings.selectionToolbarItems,
 			this.settings.hideBuiltInButtons,
-			loadUncachedIcons,
 		);
 		this.noteToolbarManager.renderAll(
 			this.settings.noteToolbarItems,
 			this.settings.noteToolbarPosition,
-			loadUncachedIcons,
 		);
 		this.selectionToolbarManager.setItems(
 			this.settings.selectionToolbarItems,
 			this.settings.selectionToolbarOnKeyboard,
-			loadUncachedIcons,
 		);
 	}
 
@@ -403,6 +260,16 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 		if (!movedItem) return;
 		this.settings.leftRibbonItems.splice(targetIndex, 0, movedItem);
 		
+		await this.saveSettings();
+	}
+
+	private async reorderNoteToolbarItems(sourceIndex: number, targetIndex: number): Promise<void> {
+		if (sourceIndex === targetIndex) return;
+
+		const [movedItem] = this.settings.noteToolbarItems.splice(sourceIndex, 1);
+		if (!movedItem) return;
+		this.settings.noteToolbarItems.splice(targetIndex, 0, movedItem);
+
 		await this.saveSettings();
 	}
 }

@@ -67,9 +67,17 @@
   background-color: var(--background-modifier-hover);
 }
 
-.basic-vault-content-toolbar-button > :is(svg, .custom-icon-svg, .custom-icon-mask) {
+.basic-vault-content-toolbar-button > svg {
   width: var(--icon-size);
   height: var(--icon-size);
+}
+
+.basic-vault-content-toolbar-divider {
+  flex: 0 0 1px;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background-color: var(--background-modifier-border);
 }
 
 .basic-vault-selection-toolbar {

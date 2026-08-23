@@ -4,12 +4,13 @@ import { createCustomButton, createDivider } from '../settings';
 import { ButtonEditorModal } from '../modals/buttonEditorModal';
 import { ConfirmModal } from '../modals/confirmModal';
 import { getRegisteredCommands } from '../utils/commandRegistry';
-import { CustomIconManager } from '../utils/customIconManager';
-import { FolderSuggester } from '../utils/folderSuggester';
 import { PointerSortController, PointerSortItem } from '../utils/pointerSortController';
+import { CustomIconsIntegration } from '../integrations/customIconsIntegration';
+import { MorphIconManager } from '../utils/morphIconManager';
 
 type SettingsTabKey = RibbonVaultButtonsSettings['settingsTab'];
 type ButtonArea = Exclude<SettingsTabKey, 'general'>;
+const ICON_PREVIEW_INTERVAL = 2000;
 
 interface RibbonVaultButtonsPlugin extends Plugin {
 	settings: RibbonVaultButtonsSettings;
@@ -18,26 +19,35 @@ interface RibbonVaultButtonsPlugin extends Plugin {
 	buttonManager: {
 		applyStyleSettings(hideBuiltInButtons?: boolean): void;
 		applyDefaultActionsStyle(hideDefaultActions?: boolean): void;
-		refreshButtonIcons(iconName?: string, loadUncachedIcons?: boolean): void;
 	};
-	customIconManager: CustomIconManager;
+	customIconsIntegration: CustomIconsIntegration;
 }
 
 export class CustomButtonsSettingTab extends PluginSettingTab {
 	plugin: RibbonVaultButtonsPlugin;
 	private sortController: PointerSortController | null = null;
 	private commandNameById = new Map<string, string>();
+	private readonly scrollTopByTab = new Map<SettingsTabKey, number>();
+	private readonly previewMorphManager: MorphIconManager;
+	private readonly previewCycleTimers = new Map<HTMLElement, { id: number; win: Window }>();
+	private renderedTab: SettingsTabKey | null = null;
 
 	icon: string = 'panel-left';
 
 	constructor(app: App, plugin: RibbonVaultButtonsPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+		this.previewMorphManager = new MorphIconManager(
+			(element, iconName) => this.plugin.customIconsIntegration.renderIcon(element, iconName),
+		);
 	}
 
 	display(): void {
 		const { containerEl } = this;
+		this.rememberScrollPosition();
 		this.destroySortController();
+		this.clearPreviewCycles();
+		this.previewMorphManager.clearElements();
 		containerEl.empty();
 		containerEl.addClass('basic-vault-settings-root');
 		this.commandNameById.clear();
@@ -56,11 +66,33 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		const contentEl = scrollEl.createDiv({ cls: 'basic-vault-settings-content' });
 
 		this.renderActiveTab(contentEl);
+		this.renderedTab = this.plugin.settings.settingsTab;
+		scrollEl.scrollTop = this.scrollTopByTab.get(this.renderedTab) ?? 0;
 	}
 
 	hide(): void {
+		this.rememberScrollPosition();
 		this.destroySortController();
+		this.clearPreviewCycles();
+		this.previewMorphManager.clearElements();
 		super.hide();
+	}
+
+	refreshIntegratedIconPreviews(): void {
+		this.previewMorphManager.invalidate();
+		const previewEls = this.containerEl.querySelectorAll<HTMLElement>(
+			'.basic-vault-button-name-icon-layer[data-primary-icon]',
+		);
+		for (const previewEl of Array.from(previewEls)) {
+			const iconName = previewEl.dataset.primaryIcon;
+			if (iconName) this.renderNameIconPreview(previewEl, iconName);
+		}
+	}
+
+	private rememberScrollPosition(): void {
+		if (!this.renderedTab) return;
+		const scrollEl = this.containerEl.querySelector<HTMLElement>('.basic-vault-settings-scroll');
+		if (scrollEl) this.scrollTopByTab.set(this.renderedTab, scrollEl.scrollTop);
 	}
 
 	private createTabButton(parentEl: HTMLElement, tab: SettingsTabKey, label: string) {
@@ -127,16 +159,18 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 
 		if (items.length === 0) {
 			itemsGroup.addSetting((setting) => {
+				const supportsDivider = area !== 'page-header';
 				setting
 					.setName(`还没有添加${this.getAreaLabel(area)}按钮`)
-					.setDesc(area === 'left-ribbon'
-						? '点击下方按钮开始创建左侧边栏按钮或分割线'
+					.setDesc(supportsDivider
+						? `点击下方按钮开始创建${this.getAreaLabel(area)}按钮或分割线`
 						: `点击下方按钮开始创建${this.getAreaLabel(area)}按钮`);
 			});
 		} else {
 			items.forEach((item, index) => {
 				if (item.type === 'divider') {
-					this.createDividerSetting(itemsGroup, index, 'left-ribbon', sortableItems);
+					if (area === 'page-header') return;
+					this.createDividerSetting(itemsGroup, index, area, sortableItems);
 					return;
 				}
 
@@ -157,13 +191,13 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 					});
 			});
 
-			if (area === 'left-ribbon') {
+			if (area !== 'page-header') {
 				addSetting.addButton((button) => {
 					button
 						.setButtonText('添加分割线')
 						.setClass('basic-vault-item-add-btn')
 						.onClick(() => {
-							void this.addDivider();
+							void this.addDivider(area);
 						});
 				});
 			}
@@ -252,36 +286,6 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 					}));
 		});
 
-		settingsGroup.addSetting((setting) => {
-			setting
-				.setName('自定义图标文件夹')
-				.setDesc('自定义图标目录')
-				.addText((text) => {
-					text
-						.setPlaceholder('例如: Assets/Icons')
-						.setValue(this.plugin.settings.iconFolder)
-						.onChange(async (value) => {
-							this.plugin.settings.iconFolder = value.trim();
-							await this.plugin.saveSettings();
-						});
-
-					new FolderSuggester(this.app, text.inputEl);
-				});
-		});
-
-		settingsGroup.addSetting((setting) => {
-			setting
-				.setName('图标遮罩')
-				.setDesc('开启后将自定义 SVG 图标强制渲染为 Obsidian 默认图标颜色, 关闭后保留原始颜色')
-				.addToggle((toggle) => toggle
-					.setValue(this.plugin.settings.iconMask)
-					.onChange(async (value) => {
-						this.plugin.settings.iconMask = value;
-						await this.plugin.saveSettings();
-						this.plugin.buttonManager.refreshButtonIcons();
-						this.display();
-					}));
-		});
 	}
 
 	private async addCustomButton(area: ButtonArea) {
@@ -295,8 +299,8 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		this.openButtonEditor(area, index, true);
 	}
 
-	private async addDivider() {
-		this.plugin.settings.leftRibbonItems.push(createDivider());
+	private async addDivider(area: Exclude<ButtonArea, 'page-header'>) {
+		this.getItems(area).push(createDivider());
 		await this.plugin.saveSettings();
 		this.plugin.initVaultButtons();
 		this.display();
@@ -372,8 +376,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		}
 
 		new ButtonEditorModal(this.app, item, {
-			iconFolder: this.plugin.settings.iconFolder,
-			iconMask: this.plugin.settings.iconMask,
+			customIconsIntegration: this.plugin.customIconsIntegration,
 			onChange: async (savedButton) => {
 				this.getItems(area)[index] = savedButton;
 				await this.plugin.saveSettings();
@@ -394,43 +397,105 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		const primaryIconName = button.icon || 'help-circle';
 		const toggleIconName = button.toggleIcon || primaryIconName;
 		const shouldAnimateToggle = primaryIconName !== toggleIconName;
-		const iconWrapEl = nameWrapEl.createSpan({
-			cls: `basic-vault-button-name-icon${shouldAnimateToggle ? ' is-animated' : ''}`,
-		});
+		const iconWrapEl = nameWrapEl.createSpan({ cls: 'basic-vault-button-name-icon' });
 		const iconStackEl = iconWrapEl.createSpan({ cls: 'basic-vault-button-name-icon-stack' });
-		const primaryPreviewEl = iconStackEl.createSpan({ cls: 'basic-vault-button-name-icon-layer is-primary' });
-		const togglePreviewEl = shouldAnimateToggle
-			? iconStackEl.createSpan({ cls: 'basic-vault-button-name-icon-layer is-toggle' })
-			: null;
+		const previewEl = iconStackEl.createSpan({ cls: 'basic-vault-button-name-icon-layer' });
+		previewEl.dataset.primaryIcon = primaryIconName;
+		previewEl.dataset.toggleIcon = toggleIconName;
 		nameWrapEl.createSpan({
 			cls: 'basic-vault-button-name-text',
 			text: button.tooltip.trim() || '未命名按钮'
 		});
 
 		const tooltipText = shouldAnimateToggle
-			? `主图标: ${this.plugin.customIconManager.getDisplayName(primaryIconName)}\n切换图标: ${this.plugin.customIconManager.getDisplayName(toggleIconName)}`
-			: `图标: ${this.plugin.customIconManager.getDisplayName(primaryIconName)}`;
+			? `主图标: ${primaryIconName}\n切换图标: ${toggleIconName}`
+			: `图标: ${primaryIconName}`;
 		setTooltip(iconWrapEl, tooltipText);
 
-		void this.renderNameIconPreview(primaryPreviewEl, primaryIconName);
-		if (togglePreviewEl) {
-			void this.renderNameIconPreview(togglePreviewEl, toggleIconName);
+		this.renderNameIconPreview(previewEl, primaryIconName);
+		if (shouldAnimateToggle) {
+			const startCycle = () => this.startPreviewCycle(
+				previewEl,
+				primaryIconName,
+				toggleIconName,
+			);
+			const stopCycle = () => this.stopPreviewCycle(previewEl, primaryIconName);
+			setting.settingEl.addEventListener('mouseenter', startCycle);
+			setting.settingEl.addEventListener('mouseleave', () => {
+				if (!setting.settingEl.contains(setting.settingEl.ownerDocument.activeElement)) {
+					stopCycle();
+				}
+			});
+			setting.settingEl.addEventListener('focusin', startCycle);
+			setting.settingEl.addEventListener('focusout', (event) => {
+				if (
+					!setting.settingEl.contains(event.relatedTarget as Node | null) &&
+					!setting.settingEl.matches(':hover')
+				) {
+					stopCycle();
+				}
+			});
 		}
 	}
 
-	private async renderNameIconPreview(previewEl: HTMLElement, iconName: string) {
-		previewEl.empty();
-
-		if (this.plugin.customIconManager.isCustomIcon(iconName)) {
-			const rendered = await this.plugin.customIconManager.renderIcon(iconName, previewEl, this.plugin.settings.iconMask);
-			if (!rendered) {
-				previewEl.setText('?');
+	private startPreviewCycle(
+		previewEl: HTMLElement,
+		primaryIcon: string,
+		toggleIcon: string,
+	): void {
+		if (this.previewCycleTimers.has(previewEl)) return;
+		const ownerWindow = previewEl.win;
+		const timerId = ownerWindow.setInterval(() => {
+			if (!previewEl.isConnected) {
+				this.clearPreviewCycle(previewEl);
+				return;
 			}
-			return;
+			const targetIcon = previewEl.dataset.previewIcon === primaryIcon
+				? toggleIcon
+				: primaryIcon;
+			this.transitionNameIcon(previewEl, targetIcon);
+		}, ICON_PREVIEW_INTERVAL);
+		this.previewCycleTimers.set(previewEl, { id: timerId, win: ownerWindow });
+	}
+
+	private stopPreviewCycle(previewEl: HTMLElement, primaryIcon: string): void {
+		this.clearPreviewCycle(previewEl);
+		this.transitionNameIcon(previewEl, primaryIcon);
+	}
+
+	private clearPreviewCycle(previewEl: HTMLElement): void {
+		const timer = this.previewCycleTimers.get(previewEl);
+		if (!timer) return;
+		timer.win.clearInterval(timer.id);
+		this.previewCycleTimers.delete(previewEl);
+	}
+
+	private clearPreviewCycles(): void {
+		for (const timer of this.previewCycleTimers.values()) {
+			timer.win.clearInterval(timer.id);
 		}
+		this.previewCycleTimers.clear();
+	}
+
+	private transitionNameIcon(previewEl: HTMLElement, targetIcon: string): void {
+		const currentIcon = previewEl.dataset.previewIcon;
+		if (!currentIcon || currentIcon === targetIcon) return;
+		previewEl.dataset.previewIcon = targetIcon;
+		if (!this.previewMorphManager.transition(previewEl, currentIcon, targetIcon)) {
+			this.renderNameIconPreview(previewEl, targetIcon);
+		}
+	}
+
+	private renderNameIconPreview(previewEl: HTMLElement, iconName: string): void {
+		this.previewMorphManager.resetElement(previewEl);
+		previewEl.empty();
+		previewEl.dataset.previewIcon = iconName;
+
+		if (this.plugin.customIconsIntegration.renderIcon(previewEl, iconName)) return;
 
 		try {
 			setIcon(previewEl, iconName || 'help-circle');
+			if (!previewEl.querySelector('svg')) previewEl.setText('?');
 		} catch {
 			previewEl.setText('?');
 		}
@@ -469,7 +534,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 	private createDividerSetting(
 		actionsGroup: SettingGroup,
 		index: number,
-		area: Extract<ButtonArea, 'left-ribbon'>,
+		area: Exclude<ButtonArea, 'page-header'>,
 		sortableItems: PointerSortItem[],
 	): void {
 		actionsGroup.addSetting((setting) => {

@@ -1,49 +1,58 @@
 import { App, MarkdownView } from 'obsidian';
-import { CustomButton, NoteToolbarPosition } from '../types';
+import { ButtonItem, CustomButton, NoteToolbarPosition } from '../types';
+import { PointerSortController, PointerSortItem } from './pointerSortController';
 
 type NoteToolbarButtonRenderer = (
 	parentEl: HTMLElement,
 	button: CustomButton,
 	index: number,
-	loadUncachedIcon: boolean,
 ) => HTMLElement;
+
+type NoteToolbarReorderHandler = (
+	sourceIndex: number,
+	targetIndex: number,
+) => void | Promise<void>;
 
 export class NoteToolbarManager {
 	private readonly containers = new Set<HTMLElement>();
 	private readonly toolbarByView = new WeakMap<MarkdownView, HTMLElement>();
 	private readonly alignmentFrames = new Map<number, Window>();
+	private readonly sortControllers = new Map<HTMLElement, PointerSortController>();
 
 	constructor(
 		private readonly app: App,
 		private readonly renderButton: NoteToolbarButtonRenderer,
+		private readonly onReorder: NoteToolbarReorderHandler,
+		private readonly onReorderSettled: () => void,
 	) {}
 
 	renderAll(
-		items: CustomButton[],
+		items: ButtonItem[],
 		position: NoteToolbarPosition,
-		loadUncachedIcons = true,
 	): void {
 		this.clear();
-		if (items.length === 0) return;
-		this.sync(items, position, loadUncachedIcons);
+		if (!this.hasButtons(items)) return;
+		this.sync(items, position);
 	}
 
 	sync(
-		items: CustomButton[],
+		items: ButtonItem[],
 		position: NoteToolbarPosition,
-		loadUncachedIcons = true,
 	): void {
 		for (const containerEl of this.containers) {
-			if (!containerEl.isConnected) this.containers.delete(containerEl);
+			if (!containerEl.isConnected) {
+				this.destroySortController(containerEl);
+				this.containers.delete(containerEl);
+			}
 		}
-		if (items.length === 0) {
+		if (!this.hasButtons(items)) {
 			this.clear();
 			return;
 		}
 
 		this.app.workspace.iterateAllLeaves((leaf) => {
 			if (!(leaf.view instanceof MarkdownView)) return;
-			this.addToView(leaf.view, items, position, loadUncachedIcons);
+			this.addToView(leaf.view, items, position);
 		});
 	}
 
@@ -53,13 +62,13 @@ export class NoteToolbarManager {
 
 	private addToView(
 		view: MarkdownView,
-		items: CustomButton[],
+		items: ButtonItem[],
 		position: NoteToolbarPosition,
-		loadUncachedIcons: boolean,
 	): void {
 		const existing = this.toolbarByView.get(view);
 		if (existing?.isConnected && existing.dataset.position === position) return;
 		if (existing) {
+			this.destroySortController(existing);
 			existing.remove();
 			this.containers.delete(existing);
 		}
@@ -70,8 +79,18 @@ export class NoteToolbarManager {
 		});
 		toolbarEl.dataset.position = position;
 		const actionsEl = toolbarEl.createDiv({ cls: 'basic-vault-content-toolbar-actions' });
-		items.forEach((button, index) => {
-			this.renderButton(actionsEl, button, index, loadUncachedIcons);
+		const sortableItems: PointerSortItem[] = [];
+		items.forEach((item, index) => {
+			if (item.type === 'divider') {
+				const dividerEl = actionsEl.createDiv({
+					cls: 'basic-vault-content-toolbar-divider',
+					attr: { role: 'separator' },
+				});
+				sortableItems.push({ key: item.id, element: dividerEl });
+				return;
+			}
+			const buttonEl = this.renderButton(actionsEl, item, index);
+			sortableItems.push({ key: `note:${index}`, element: buttonEl });
 		});
 		toolbarEl.addEventListener('pointerdown', () => {
 			this.app.workspace.setActiveLeaf(view.leaf, { focus: true });
@@ -91,6 +110,19 @@ export class NoteToolbarManager {
 
 		this.toolbarByView.set(view, toolbarEl);
 		this.containers.add(toolbarEl);
+		if (sortableItems.length > 1) {
+			this.sortControllers.set(toolbarEl, new PointerSortController({
+				containerEl: actionsEl,
+				items: sortableItems,
+				scrollEl: toolbarEl,
+				axis: 'horizontal',
+				onReorder: this.onReorder,
+				onSettled: this.onReorderSettled,
+				onError: (error) => {
+					console.error('Custom Buttons failed to save note toolbar order:', error);
+				},
+			}));
+		}
 	}
 
 	private scheduleBottomAlignment(toolbarEl: HTMLElement): void {
@@ -106,11 +138,22 @@ export class NoteToolbarManager {
 		this.alignmentFrames.set(frameId, ownerWindow);
 	}
 
+	private hasButtons(items: ButtonItem[]): boolean {
+		return items.some((item) => item.type !== 'divider');
+	}
+
+	private destroySortController(toolbarEl: HTMLElement): void {
+		this.sortControllers.get(toolbarEl)?.destroy();
+		this.sortControllers.delete(toolbarEl);
+	}
+
 	private clear(): void {
 		for (const [frameId, ownerWindow] of this.alignmentFrames) {
 			ownerWindow.cancelAnimationFrame(frameId);
 		}
 		this.alignmentFrames.clear();
+		for (const controller of this.sortControllers.values()) controller.destroy();
+		this.sortControllers.clear();
 		for (const containerEl of this.containers) containerEl.remove();
 		this.containers.clear();
 	}
