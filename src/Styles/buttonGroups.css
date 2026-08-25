@@ -1,0 +1,41 @@
+/* 按钮组菜单 */
+
+.basic-vault-has-button-group {
+  position: relative;
+}
+
+.basic-vault-has-button-group::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 0;
+  height: 0;
+  border-top: 3px solid currentColor;
+  border-right: 3px solid transparent;
+  border-left: 3px solid transparent;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.menu-item[data-section^='basic-vault-button-group-'] {
+  min-height: 30px;
+}
+
+.menu-item[data-section='basic-vault-button-group-ribbon'],
+.menu-item[data-section='basic-vault-button-group-note'],
+.menu-item[data-section='basic-vault-button-group-selection'] {
+  min-height: 28px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  font-size: var(--font-ui-small);
+}
+
+.menu-item[data-section='basic-vault-button-group-selection'] {
+  min-height: 26px;
+  font-size: var(--font-ui-smaller);
+}
+
+.menu-item[data-section^='basic-vault-button-group-'] .menu-item-icon {
+  --icon-size: var(--icon-s);
+}

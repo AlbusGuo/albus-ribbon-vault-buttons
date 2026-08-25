@@ -10,7 +10,7 @@ import { CustomIconsIntegration } from './src/integrations/customIconsIntegratio
 
 /**
  * Custom Buttons 插件主类
- * 为 Obsidian 的侧边栏、标题栏和 Markdown 视图提供自定义按钮
+ * 为 Obsidian 的侧边栏, 标题栏和 Markdown 视图提供自定义按钮
  */
 export default class RibbonVaultButtonsPlugin extends Plugin {
 	settings: RibbonVaultButtonsSettings;
@@ -47,6 +47,7 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			this.reorderButtons.bind(this),
 			this.initVaultButtons.bind(this),
 			this.waitForSettingsWrites.bind(this),
+			() => this.settings.buttonGroupTrigger,
 			(element, iconName) => this.customIconsIntegration.renderIcon(element, iconName)
 		);
 		this.noteToolbarManager = new NoteToolbarManager(
@@ -166,11 +167,20 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 			const normalizedIconName = iconName.trim();
 			if (normalizedIconName) iconIds.add(normalizedIconName);
 		};
+		const collectButton = (button: Exclude<ButtonItem, { type: 'divider' }>): void => {
+			collect(button.icon);
+			collect(button.toggleIcon || button.icon);
+			if (button.type === 'button-group') {
+				for (const groupItem of button.groupItems) {
+					collect(groupItem.icon);
+					collect(groupItem.toggleIcon || groupItem.icon);
+				}
+			}
+		};
 		const collectItems = (items: ButtonItem[]): void => {
 			for (const item of items) {
 				if (item.type === 'divider') continue;
-				collect(item.icon);
-				collect(item.toggleIcon || item.icon);
+				collectButton(item);
 			}
 		};
 

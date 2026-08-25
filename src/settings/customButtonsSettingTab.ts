@@ -1,6 +1,6 @@
 import { App, Plugin, PluginSettingTab, Setting, SettingGroup, setIcon, setTooltip } from 'obsidian';
 import { CustomButton, RibbonVaultButtonsSettings } from '../types';
-import { createCustomButton, createDivider } from '../settings';
+import { createButtonGroup, createCustomButton, createDivider } from '../settings';
 import { ButtonEditorModal } from '../modals/buttonEditorModal';
 import { ConfirmModal } from '../modals/confirmModal';
 import { getRegisteredCommands } from '../utils/commandRegistry';
@@ -161,10 +161,10 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 			itemsGroup.addSetting((setting) => {
 				const supportsDivider = area !== 'page-header';
 				setting
-					.setName(`还没有添加${this.getAreaLabel(area)}按钮`)
+					.setName(`还没有添加${this.getAreaLabel(area)}项目`)
 					.setDesc(supportsDivider
-						? `点击下方按钮开始创建${this.getAreaLabel(area)}按钮或分割线`
-						: `点击下方按钮开始创建${this.getAreaLabel(area)}按钮`);
+						? `点击下方按钮开始创建按钮, 按钮组或分割线`
+						: `点击下方按钮开始创建按钮或按钮组`);
 			});
 		} else {
 			items.forEach((item, index) => {
@@ -184,10 +184,19 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 
 			addSetting.addButton((button) => {
 				button
-					.setButtonText('添加新按钮')
+					.setButtonText('添加按钮')
 					.setClass('basic-vault-item-add-btn')
 					.onClick(() => {
 						void this.addCustomButton(area);
+					});
+			});
+
+			addSetting.addButton((button) => {
+				button
+					.setButtonText('添加按钮组')
+					.setClass('basic-vault-item-add-btn')
+					.onClick(() => {
+						void this.addButtonGroup(area);
 					});
 			});
 
@@ -286,11 +295,37 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 					}));
 		});
 
+		settingsGroup.addSetting((setting) => {
+			setting
+				.setName('按钮组展开方式')
+				.setDesc('设置按钮组通过点击或悬停展开')
+				.addDropdown((dropdown) => dropdown
+					.addOption('click', '点击')
+					.addOption('hover', '悬停')
+					.setValue(this.plugin.settings.buttonGroupTrigger)
+					.onChange(async (value) => {
+						this.plugin.settings.buttonGroupTrigger = value === 'hover' ? 'hover' : 'click';
+						await this.plugin.saveSettings();
+						this.plugin.initVaultButtons();
+					}));
+		});
+
 	}
 
 	private async addCustomButton(area: ButtonArea) {
 		const newButton = createCustomButton();
 		this.getItems(area).push(newButton);
+		await this.plugin.saveSettings();
+		this.plugin.initVaultButtons();
+		this.display();
+
+		const index = this.getItems(area).length - 1;
+		this.openButtonEditor(area, index, true);
+	}
+
+	private async addButtonGroup(area: ButtonArea) {
+		const buttonGroup = createButtonGroup();
+		this.getItems(area).push(buttonGroup);
 		await this.plugin.saveSettings();
 		this.plugin.initVaultButtons();
 		this.display();
@@ -320,11 +355,12 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		}
 
 		const isDivider = item.type === 'divider';
+		const isButtonGroup = !isDivider && item.type === 'button-group';
 		const confirmed = await ConfirmModal.confirm(this.app, {
-			title: isDivider ? '删除分割线' : '删除按钮',
+			title: isDivider ? '删除分割线' : isButtonGroup ? '删除按钮组' : '删除按钮',
 			message: isDivider
 				? '确定要删除这条分割线吗? 此操作会立即生效.'
-				: `确定要删除 "${(item as CustomButton).tooltip.trim() || '未命名按钮'}" 吗? 此操作会立即生效.`,
+				: `确定要删除 "${(item as CustomButton).tooltip.trim() || (isButtonGroup ? '未命名按钮组' : '未命名按钮')}" 吗? 此操作会立即生效.`,
 			confirmText: '删除',
 			cancelText: '取消',
 			danger: true,
@@ -346,20 +382,21 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 	): void {
 		actionsGroup.addSetting((setting) => {
 			setting.settingEl.addClass('basic-vault-button-setting');
-			setting.setName(button.tooltip.trim() || '未命名按钮');
+			const isButtonGroup = button.type === 'button-group';
+			setting.setName(button.tooltip.trim() || (isButtonGroup ? '未命名按钮组' : '未命名按钮'));
 			setting.setDesc(this.getButtonSummary(button));
 			this.decorateButtonName(setting, button);
 
 			setting
 				.addExtraButton((extraButton) => extraButton
 					.setIcon('pencil')
-					.setTooltip('编辑按钮')
+					.setTooltip(isButtonGroup ? '编辑按钮组' : '编辑按钮')
 					.onClick(() => {
 						this.openButtonEditor(area, index);
 					}))
 				.addExtraButton((extraButton) => extraButton
 					.setIcon('trash')
-					.setTooltip('删除按钮')
+					.setTooltip(isButtonGroup ? '删除按钮组' : '删除按钮')
 					.onClick(() => {
 						void this.confirmRemoveItem(area, index);
 					}));
@@ -396,7 +433,8 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		const nameWrapEl = setting.nameEl.createSpan({ cls: 'basic-vault-button-name-wrap' });
 		const primaryIconName = button.icon || 'help-circle';
 		const toggleIconName = button.toggleIcon || primaryIconName;
-		const shouldAnimateToggle = primaryIconName !== toggleIconName;
+		const shouldAnimateToggle =
+			button.type !== 'button-group' && primaryIconName !== toggleIconName;
 		const iconWrapEl = nameWrapEl.createSpan({ cls: 'basic-vault-button-name-icon' });
 		const iconStackEl = iconWrapEl.createSpan({ cls: 'basic-vault-button-name-icon-stack' });
 		const previewEl = iconStackEl.createSpan({ cls: 'basic-vault-button-name-icon-layer' });
@@ -502,6 +540,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 	}
 
 	private getButtonSummary(button: CustomButton): string {
+		if (button.type === 'button-group') return `按钮组 - ${button.groupItems.length} 项`;
 		const target = (() => {
 			switch (button.type) {
 				case 'command':
@@ -528,6 +567,8 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 				return '文件';
 			case 'url':
 				return '网址';
+			case 'button-group':
+				return '按钮组';
 		}
 	}
 

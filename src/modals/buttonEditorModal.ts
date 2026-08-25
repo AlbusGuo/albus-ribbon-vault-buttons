@@ -6,6 +6,7 @@ import { FileSuggestModal } from './fileSuggestModal';
 import { IconSuggestModal } from './iconSuggestModal';
 import { CustomIconsIntegration } from '../integrations/customIconsIntegration';
 import { MorphIconManager } from '../utils/morphIconManager';
+import { createCustomButton } from '../settings';
 
 interface ButtonEditorModalOptions {
 	customIconsIntegration: CustomIconsIntegration;
@@ -24,6 +25,7 @@ export class ButtonEditorModal {
 	private valueInputEl: HTMLInputElement | null = null;
 	private typeSelectEl: HTMLSelectElement | null = null;
 	private commandGroupContainerEl: HTMLElement | null = null;
+	private buttonGroupContainerEl: HTMLElement | null = null;
 	private primaryPreviewEl: HTMLElement | null = null;
 	private togglePreviewEl: HTMLElement | null = null;
 	private lastCommittedState: string;
@@ -73,7 +75,10 @@ export class ButtonEditorModal {
 		const nameControlEl = this.createFormRow(this.contentEl, '名称');
 		this.nameInputEl = nameControlEl.createEl('input', {
 			cls: 'basic-vault-button-editor-input basic-vault-button-editor-name-input',
-			attr: { type: 'text', placeholder: '按钮名称' },
+			attr: {
+				type: 'text',
+				placeholder: this.draft.type === 'button-group' ? '按钮组名称' : '按钮名称',
+			},
 		});
 		this.nameInputEl.value = this.draft.tooltip;
 		this.nameInputEl.addEventListener('input', () => {
@@ -81,10 +86,19 @@ export class ButtonEditorModal {
 			this.scheduleCommit();
 		});
 
-		const metaRowEl = this.contentEl.createDiv({ cls: 'basic-vault-button-editor-compact-row' });
+		const metaRowEl = this.contentEl.createDiv({
+			cls: [
+				'basic-vault-button-editor-compact-row',
+				this.draft.type === 'button-group' ? 'is-button-group' : '',
+			],
+		});
 		this.createIconField(metaRowEl, '主图标', this.draft.icon, false);
-		this.createIconField(metaRowEl, '切换图标', this.draft.toggleIcon, true);
-		this.createTypeField(metaRowEl);
+		if (this.draft.type !== 'button-group') {
+			this.createIconField(metaRowEl, '切换图标', this.draft.toggleIcon, true);
+		}
+		if (this.draft.type !== 'button-group') {
+			this.createTypeField(metaRowEl);
+		}
 
 		this.renderValueEditor();
 	};
@@ -147,6 +161,10 @@ export class ButtonEditorModal {
 
 		this.valueInputEl = null;
 		this.commandGroupContainerEl = null;
+		if (this.draft.type === 'button-group') {
+			this.renderButtonGroupEditor();
+			return;
+		}
 
 		const valueControlEl = this.createFormRow(this.contentEl, this.getValueFieldName());
 
@@ -252,6 +270,116 @@ export class ButtonEditorModal {
 		});
 	}
 
+	private renderButtonGroupEditor(): void {
+		if (!this.contentEl) return;
+		this.previewMorphManager.clearElements();
+		this.buttonGroupContainerEl
+			?.closest('.basic-vault-button-editor-form-row')
+			?.remove();
+
+		const valueControlEl = this.createFormRow(this.contentEl, '按钮组');
+		this.buttonGroupContainerEl = valueControlEl.createDiv({
+			cls: 'basic-vault-button-group-editor',
+		});
+		this.buttonGroupContainerEl.createDiv({
+			cls: 'basic-vault-button-group-help',
+			text: '按钮组包含一个或多个可执行按钮',
+		});
+		const listEl = this.buttonGroupContainerEl.createDiv({
+			cls: 'basic-vault-button-group-list',
+		});
+		if (this.draft.groupItems.length === 0) {
+			listEl.createDiv({
+				cls: 'basic-vault-button-command-empty',
+				text: '还没有添加组内按钮',
+			});
+		}
+
+		this.draft.groupItems.forEach((groupItem, index) => {
+			const rowEl = listEl.createDiv({ cls: 'basic-vault-button-group-item-row' });
+			const previewEl = rowEl.createSpan({ cls: 'basic-vault-button-group-item-icon' });
+			this.updateIconPreview(groupItem.icon, previewEl);
+			const infoEl = rowEl.createDiv({ cls: 'basic-vault-button-group-item-info' });
+			infoEl.createDiv({
+				cls: 'basic-vault-button-group-item-name',
+				text: groupItem.tooltip.trim() || '未命名按钮',
+			});
+			infoEl.createDiv({
+				cls: 'basic-vault-button-group-item-summary',
+				text: this.getGroupItemSummary(groupItem),
+			});
+			const actionsEl = rowEl.createDiv({ cls: 'basic-vault-button-group-item-actions' });
+			this.createIconButton(actionsEl, 'up-chevron-glyph', '上移', () => {
+				if (index === 0) return;
+				[this.draft.groupItems[index - 1], this.draft.groupItems[index]] = [
+					this.draft.groupItems[index],
+					this.draft.groupItems[index - 1],
+				];
+				this.renderButtonGroupEditor();
+				void this.commitChanges();
+			});
+			this.createIconButton(actionsEl, 'down-chevron-glyph', '下移', () => {
+				if (index >= this.draft.groupItems.length - 1) return;
+				[this.draft.groupItems[index + 1], this.draft.groupItems[index]] = [
+					this.draft.groupItems[index],
+					this.draft.groupItems[index + 1],
+				];
+				this.renderButtonGroupEditor();
+				void this.commitChanges();
+			});
+			this.createIconButton(actionsEl, 'pencil', '编辑组内按钮', () => {
+				this.openGroupItemEditor(index);
+			});
+			this.createIconButton(actionsEl, 'trash', '删除组内按钮', () => {
+				this.draft.groupItems.splice(index, 1);
+				this.renderButtonGroupEditor();
+				void this.commitChanges();
+			});
+		});
+
+		const addButtonEl = this.buttonGroupContainerEl.createEl('button', {
+			cls: 'basic-vault-button-editor-text-button',
+			text: '+ 添加组内按钮',
+			attr: { type: 'button' },
+		});
+		addButtonEl.addEventListener('click', () => {
+			this.draft.groupItems.push(createCustomButton());
+			const groupItemIndex = this.draft.groupItems.length - 1;
+			this.renderButtonGroupEditor();
+			void this.commitChanges();
+			this.openGroupItemEditor(groupItemIndex);
+		});
+	}
+
+	private openGroupItemEditor(index: number): void {
+		const groupItem = this.draft.groupItems[index];
+		if (!groupItem) return;
+
+		new ButtonEditorModal(this.app, groupItem, {
+			customIconsIntegration: this.options.customIconsIntegration,
+			onChange: async (savedButton) => {
+				this.draft.groupItems[index] = savedButton;
+				await this.commitChanges();
+			},
+			onClose: () => this.renderButtonGroupEditor(),
+		}).open();
+	}
+
+	private getGroupItemSummary(button: CustomButton): string {
+		switch (button.type) {
+			case 'command':
+				return `命令 - ${button.command || '未设置命令'}`;
+			case 'command-group':
+				return `命令组 - ${button.commands.length} 个命令`;
+			case 'file':
+				return `文件 - ${button.file || '未设置文件'}`;
+			case 'url':
+				return `网址 - ${button.url || '未设置网址'}`;
+			case 'button-group':
+				return `按钮组 - ${button.groupItems.length} 项`;
+		}
+	}
+
 	private createIconButton(parentEl: HTMLElement, icon: string, label: string, onClick: () => void): void {
 		const button = parentEl.createEl('button', {
 			cls: 'basic-vault-button-editor-icon-button',
@@ -269,6 +397,11 @@ export class ButtonEditorModal {
 
 		const nextButton = structuredClone(this.draft);
 		nextButton.commands = nextButton.commands.map((commandId) => commandId.trim()).filter(Boolean);
+		nextButton.groupItems = nextButton.groupItems.map((groupItem) => ({
+			...groupItem,
+			commands: groupItem.commands.map((commandId) => commandId.trim()).filter(Boolean),
+			groupItems: [],
+		}));
 		const nextState = JSON.stringify(nextButton);
 		if (nextState === this.lastCommittedState) {
 			return;
@@ -290,6 +423,7 @@ export class ButtonEditorModal {
 		this.valueInputEl = null;
 		this.typeSelectEl = null;
 		this.commandGroupContainerEl = null;
+		this.buttonGroupContainerEl = null;
 		this.primaryPreviewEl = null;
 		this.togglePreviewEl = null;
 		this.modal = null;
@@ -301,6 +435,9 @@ export class ButtonEditorModal {
 	}
 
 	private normalizeTypeSpecificValues(): void {
+		if (this.draft.type !== 'button-group') {
+			this.draft.groupItems = [];
+		}
 		switch (this.draft.type) {
 			case 'command':
 				this.draft.file = '';
@@ -320,6 +457,12 @@ export class ButtonEditorModal {
 			case 'url':
 				this.draft.command = '';
 				this.draft.file = '';
+				this.draft.commands = [];
+				break;
+			case 'button-group':
+				this.draft.command = '';
+				this.draft.file = '';
+				this.draft.url = '';
 				this.draft.commands = [];
 				break;
 		}
@@ -335,6 +478,8 @@ export class ButtonEditorModal {
 				return '文件';
 			case 'url':
 				return '网址';
+			case 'button-group':
+				return '按钮组';
 		}
 	}
 
@@ -348,6 +493,8 @@ export class ButtonEditorModal {
 				return '文件路径';
 			case 'url':
 				return '网址';
+			case 'button-group':
+				return '';
 		}
 	}
 
@@ -361,6 +508,8 @@ export class ButtonEditorModal {
 				return this.draft.file;
 			case 'url':
 				return this.draft.url;
+			case 'button-group':
+				return '';
 		}
 	}
 
@@ -377,6 +526,8 @@ export class ButtonEditorModal {
 				break;
 			case 'url':
 				this.draft.url = value;
+				break;
+			case 'button-group':
 				break;
 		}
 	}

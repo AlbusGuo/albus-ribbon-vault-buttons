@@ -1,7 +1,8 @@
 import { App, ItemView, TFile, WorkspaceLeaf, normalizePath, setIcon, setTooltip } from 'obsidian';
-import { CustomButton, ButtonItem, DividerItem } from '../types';
+import { ButtonGroupTrigger, CustomButton, ButtonItem, DividerItem } from '../types';
 import { PointerSortController, PointerSortItem } from './pointerSortController';
 import { MorphIconManager } from './morphIconManager';
+import { ButtonGroupMenuManager } from './buttonGroupMenuManager';
 
 interface InternalRibbon {
 	ribbonActionsEl?: HTMLElement;
@@ -36,6 +37,7 @@ export class ButtonManager {
 	private toggleStates = new Map<string, boolean>();
 	private buttonConfigs = new Map<string, CustomButton>();
 	private morphIconManager: MorphIconManager;
+	private buttonGroupMenuManager: ButtonGroupMenuManager;
 	private scheduledAnimationFrames = new Set<number>();
 	private layoutSyncScheduled = false;
 	private destroyed = false;
@@ -46,9 +48,14 @@ export class ButtonManager {
 		private onReorderButtons: (sourceIndex: number, targetIndex: number) => Promise<void>,
 		private onRibbonReorderSettled: () => void,
 		private waitForSettingsWrites: () => Promise<void>,
+		private getButtonGroupTrigger: () => ButtonGroupTrigger,
 		private renderIntegratedIcon: (element: HTMLElement, iconName: string) => boolean
 	) {
 		this.morphIconManager = new MorphIconManager(this.renderIntegratedIcon);
+		this.buttonGroupMenuManager = new ButtonGroupMenuManager(
+			this.getButtonGroupTrigger,
+			(button) => this.runRibbonAction(() => this.handleButtonClick(button)),
+		);
 	}
 
 	/**
@@ -83,6 +90,7 @@ export class ButtonManager {
 	 * 清除所有按钮
 	 */
 	private clearAllButtons() {
+		this.buttonGroupMenuManager.clear();
 		this.morphIconManager.clearElements();
 		this.ribbonSortController?.destroy();
 		this.ribbonSortController = null;
@@ -146,15 +154,30 @@ export class ButtonManager {
 		
 		this.buttonConfigs.set(buttonId, button);
 
-		const savedState = button.iconState || false;
+		const savedState = button.type !== 'button-group' && (button.iconState || false);
 		this.toggleStates.set(buttonId, savedState);
 
 		const initialIcon = savedState ? (button.toggleIcon || button.icon) : button.icon;
 		
-		const onClick = () => this.activateCustomButton(buttonId, button);
-
 		if (area === 'left') {
-			this.createRibbonButton(buttonId, button.tooltip, initialIcon, onClick, true);
+			let ribbonButtonEl: HTMLElement | null = null;
+			const onClick = () => {
+				if (
+					ribbonButtonEl &&
+					this.buttonGroupMenuManager.openIfPresent(ribbonButtonEl, button, 'ribbon')
+				) {
+					return;
+				}
+				return this.activateCustomButton(buttonId, button);
+			};
+			ribbonButtonEl = this.createRibbonButton(
+				buttonId,
+				button.tooltip,
+				initialIcon,
+				onClick,
+				true,
+			);
+			if (ribbonButtonEl) this.buttonGroupMenuManager.bind(ribbonButtonEl, button, 'ribbon');
 		}
 	}
 
@@ -231,10 +254,12 @@ export class ButtonManager {
 		}
 		buttonEl.addEventListener('click', (event) => {
 			event.stopPropagation();
+			if (this.buttonGroupMenuManager.openIfPresent(buttonEl, button, area)) return;
 			void this.runRibbonAction(() => this.activateCustomButton(buttonId, button)).catch((error) => {
 				console.error('Custom Buttons toolbar action failed:', error);
 			});
 		});
+		this.buttonGroupMenuManager.bind(buttonEl, button, area);
 
 		this.registerButtonElement(buttonId, buttonEl);
 		this.setButtonIcon(buttonEl, iconName);
@@ -278,6 +303,8 @@ export class ButtonManager {
 				if (button.url) {
 					this.openUrl(button.url);
 				}
+				break;
+			case 'button-group':
 				break;
 		}
 	}
@@ -377,11 +404,11 @@ export class ButtonManager {
 		icon: string,
 		onClick: () => void | Promise<void>,
 		sortable = false,
-	): void {
+	): HTMLElement | null {
 		const leftRibbon = this.getLeftRibbon();
 		const ribbonContainer = this.getRibbonContainer(leftRibbon);
 		if (!leftRibbon || !ribbonContainer) {
-			return;
+			return null;
 		}
 
 		const requiresDeferredIcon = icon.startsWith('CI-');
@@ -406,6 +433,7 @@ export class ButtonManager {
 		if (sortable) this.registerButtonElement(id, button);
 		this.ribbonMap.set(id, button);
 		ribbonContainer.appendChild(button);
+		return button;
 	}
 
 	private getLeftRibbon(): InternalRibbon | null {
@@ -484,8 +512,10 @@ export class ButtonManager {
 				? (item.toggleIcon || item.icon)
 				: item.icon;
 
-			const actionEl = view.addAction('help-circle', item.tooltip, () => {
+			let actionEl: HTMLElement;
+			actionEl = view.addAction('help-circle', item.tooltip, () => {
 				this.app.workspace.setActiveLeaf(leaf, { focus: true });
+				if (this.buttonGroupMenuManager.openIfPresent(actionEl, item, 'header')) return;
 				return this.activateCustomButton(buttonId, item);
 			});
 
@@ -493,6 +523,7 @@ export class ButtonManager {
 			buttons.set(buttonId, actionEl);
 			this.registerButtonElement(buttonId, actionEl);
 			this.setButtonIcon(actionEl, iconName);
+			this.buttonGroupMenuManager.bind(actionEl, item, 'header');
 		});
 	}
 
@@ -631,6 +662,7 @@ export class ButtonManager {
 		this.destroyed = true;
 		this.cancelScheduledAnimationFrames();
 		this.clearAllButtons();
+		this.buttonGroupMenuManager.destroy();
 		this.morphIconManager.destroy();
 		document.body.classList.remove('crb-show-builtin', 'crb-hide-default-actions');
 	}

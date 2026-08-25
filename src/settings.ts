@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS: RibbonVaultButtonsSettings = {
 	noteToolbarPosition: 'top-fixed',
 	hideBuiltInButtons: true,
 	hideDefaultActions: false,
+	buttonGroupTrigger: 'click',
 	settingsTab: 'general'
 };
 
@@ -43,7 +44,19 @@ export function createCustomButton(): CustomButton {
 		command: '',
 		file: '',
 		url: '',
-		commands: []
+		commands: [],
+		groupItems: [],
+	};
+}
+
+/**
+ * 创建新的按钮组
+ */
+export function createButtonGroup(): CustomButton {
+	return {
+		...createCustomButton(),
+		tooltip: '新按钮组',
+		type: 'button-group',
 	};
 }
 
@@ -76,6 +89,7 @@ function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonV
 		noteToolbarPosition: settings.noteToolbarPosition === 'bottom' ? 'bottom' : DEFAULT_SETTINGS.noteToolbarPosition,
 		hideBuiltInButtons: typeof settings.hideBuiltInButtons === 'boolean' ? settings.hideBuiltInButtons : DEFAULT_SETTINGS.hideBuiltInButtons,
 		hideDefaultActions: typeof settings.hideDefaultActions === 'boolean' ? settings.hideDefaultActions : DEFAULT_SETTINGS.hideDefaultActions,
+		buttonGroupTrigger: settings.buttonGroupTrigger === 'hover' ? 'hover' : DEFAULT_SETTINGS.buttonGroupTrigger,
 		settingsTab:
 			settings.settingsTab === 'left-ribbon' ||
 			settings.settingsTab === 'page-header' ||
@@ -86,7 +100,7 @@ function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonV
 			: DEFAULT_SETTINGS.settingsTab
 	};
 
-	const normalizeButton = (item: unknown): CustomButton | null => {
+	const normalizeButton = (item: unknown, allowButtonGroup = true): CustomButton | null => {
 		if (!item || typeof item !== 'object' || Array.isArray(item)) {
 			return null;
 		}
@@ -96,7 +110,8 @@ function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonV
 			candidate.type !== 'command' &&
 			candidate.type !== 'command-group' &&
 			candidate.type !== 'file' &&
-			candidate.type !== 'url'
+			candidate.type !== 'url' &&
+			(!allowButtonGroup || candidate.type !== 'button-group')
 		) {
 			return null;
 		}
@@ -112,9 +127,22 @@ function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonV
 			commands: Array.isArray(candidate.commands)
 				? candidate.commands.filter((commandId): commandId is string => typeof commandId === 'string')
 				: [],
+			groupItems: [],
 		};
+		const rawGroupItems = candidate.type === 'button-group' ? candidate.groupItems : [];
+		if (Array.isArray(rawGroupItems)) {
+			button.groupItems = rawGroupItems
+				.map((groupItem) => normalizeButton(groupItem, false))
+				.filter((groupItem): groupItem is CustomButton => groupItem !== null);
+		}
 
-		if (typeof candidate.iconState === 'boolean') {
+		if (button.type === 'button-group') {
+			button.toggleIcon = button.icon;
+			button.command = '';
+			button.file = '';
+			button.url = '';
+			button.commands = [];
+		} else if (typeof candidate.iconState === 'boolean') {
 			button.iconState = candidate.iconState;
 		}
 
@@ -193,6 +221,9 @@ export function sanitizeSettingsShape(raw: unknown): RibbonVaultButtonsSettings 
 		hideDefaultActions: typeof data.hideDefaultActions === 'boolean'
 			? data.hideDefaultActions
 			: defaults.hideDefaultActions,
+		buttonGroupTrigger: data.buttonGroupTrigger === 'hover'
+			? 'hover'
+			: defaults.buttonGroupTrigger,
 		settingsTab:
 			data.settingsTab === 'general' ||
 			data.settingsTab === 'left-ribbon' ||

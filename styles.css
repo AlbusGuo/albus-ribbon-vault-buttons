@@ -344,6 +344,83 @@ body.crb-hide-default-actions .side-dock-actions {
   background-color: var(--background-modifier-hover);
 }
 
+.basic-vault-button-editor-compact-row.is-button-group {
+  grid-template-columns: 72px 48px;
+}
+
+.basic-vault-button-group-editor {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.basic-vault-button-group-help {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.basic-vault-button-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(30vh, 260px);
+  overflow-y: auto;
+}
+
+.basic-vault-button-group-item-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
+.basic-vault-button-group-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+}
+
+.basic-vault-button-group-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.basic-vault-button-group-item-info {
+  min-width: 0;
+}
+
+.basic-vault-button-group-item-name,
+.basic-vault-button-group-item-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.basic-vault-button-group-item-name {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+
+.basic-vault-button-group-item-summary {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.basic-vault-button-group-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .basic-vault-confirm-modal {
   display: flex;
   flex-direction: column;
@@ -660,5 +737,47 @@ body.crb-hide-default-actions .side-dock-actions {
   .basic-vault-selection-toolbar {
     transition-duration: 0ms;
   }
+}
+
+/* 按钮组菜单 */
+
+.basic-vault-has-button-group {
+  position: relative;
+}
+
+.basic-vault-has-button-group::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 0;
+  height: 0;
+  border-top: 3px solid currentColor;
+  border-right: 3px solid transparent;
+  border-left: 3px solid transparent;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.menu-item[data-section^='basic-vault-button-group-'] {
+  min-height: 30px;
+}
+
+.menu-item[data-section='basic-vault-button-group-ribbon'],
+.menu-item[data-section='basic-vault-button-group-note'],
+.menu-item[data-section='basic-vault-button-group-selection'] {
+  min-height: 28px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  font-size: var(--font-ui-small);
+}
+
+.menu-item[data-section='basic-vault-button-group-selection'] {
+  min-height: 26px;
+  font-size: var(--font-ui-smaller);
+}
+
+.menu-item[data-section^='basic-vault-button-group-'] .menu-item-icon {
+  --icon-size: var(--icon-s);
 }
 

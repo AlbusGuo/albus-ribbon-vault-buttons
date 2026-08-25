@@ -1,7 +1,8 @@
 /**
  * 自定义按钮类型
  */
-export type ButtonType = 'command' | 'file' | 'url' | 'command-group';
+export type ButtonType = 'command' | 'file' | 'url' | 'command-group' | 'button-group';
+export type ButtonGroupTrigger = 'click' | 'hover';
 
 /**
  * 分割线配置
@@ -35,6 +36,8 @@ export interface CustomButton {
 	commands: string[];
 	/** 图标显示状态: true 表示显示切换图标, false 或 undefined 表示显示主图标 */
 	iconState?: boolean;
+	/** 按钮组成员, 仅支持一层 */
+	groupItems: CustomButton[];
 }
 
 /**
@@ -64,6 +67,8 @@ export interface RibbonVaultButtonsSettings {
 	hideBuiltInButtons: boolean;
 	/** 是否隐藏默认功能区 */
 	hideDefaultActions: boolean;
+	/** 按钮组展开方式 */
+	buttonGroupTrigger: ButtonGroupTrigger;
 	/** 设置页当前标签 */
 	settingsTab: 'general' | 'left-ribbon' | 'page-header' | 'note-toolbar' | 'selection-toolbar';
 }
