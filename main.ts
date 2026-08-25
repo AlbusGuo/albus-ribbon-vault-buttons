@@ -154,16 +154,17 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 	private syncCustomIcons(): void {
 		if (!this.customIconsIntegration) return;
 		void this.customIconsIntegration
-			.syncRequiredIcons(this.collectRequiredCustomIconIds())
+			.syncRequiredIcons(this.collectRequiredIconIds())
 			.catch((error) => {
 				console.error('Custom Buttons failed to sync Custom Icons requirements:', error);
 			});
 	}
 
-	private collectRequiredCustomIconIds(): string[] {
+	private collectRequiredIconIds(): string[] {
 		const iconIds = new Set<string>();
 		const collect = (iconName: string): void => {
-			if (iconName.startsWith('CI-')) iconIds.add(iconName);
+			const normalizedIconName = iconName.trim();
+			if (normalizedIconName) iconIds.add(normalizedIconName);
 		};
 		const collectItems = (items: ButtonItem[]): void => {
 			for (const item of items) {

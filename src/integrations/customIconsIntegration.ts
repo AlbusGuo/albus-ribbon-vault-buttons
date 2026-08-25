@@ -153,7 +153,7 @@ export class CustomIconsIntegration {
 		return Array.from(new Set(
 			iconIds
 				.map((iconId) => iconId.trim())
-				.filter((iconId) => iconId.startsWith('CI-')),
+				.filter(Boolean),
 		)).sort();
 	}
 }
