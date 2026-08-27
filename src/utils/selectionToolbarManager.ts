@@ -9,6 +9,12 @@ interface SelectionRect {
 	bottom: number;
 }
 
+interface TrackedDocument {
+	abortController: AbortController;
+	editorCount: number;
+	persistent: boolean;
+}
+
 type SelectionToolbarButtonRenderer = (
 	parentEl: HTMLElement,
 	button: CustomButton,
@@ -25,7 +31,9 @@ export class SelectionToolbarManager {
 	private pointerDown = false;
 	private selectionFromKeyboard = true;
 	private positionFrame: number | null = null;
+	private positionFrameWindow: Window | null = null;
 	private showOnKeyboard = false;
+	private readonly trackedDocuments = new Map<Document, TrackedDocument>();
 
 	constructor(
 		private readonly app: App,
@@ -34,12 +42,8 @@ export class SelectionToolbarManager {
 
 	register(plugin: Plugin): void {
 		const ownerDocument = plugin.app.workspace.containerEl.ownerDocument;
-		plugin.registerDomEvent(ownerDocument, 'pointerdown', this.handlePointerDown);
-		plugin.registerDomEvent(ownerDocument, 'pointerup', this.handlePointerUp);
-		plugin.registerDomEvent(ownerDocument, 'pointercancel', this.handlePointerCancel);
-		plugin.registerDomEvent(ownerDocument, 'keydown', this.handleKeyDown);
-		plugin.registerDomEvent(ownerDocument, 'scroll', this.handleViewportChange, true);
-		plugin.registerDomEvent(ownerDocument.defaultView ?? window, 'resize', this.handleViewportChange);
+		this.trackDocument(ownerDocument, true);
+		plugin.register(() => this.clearTrackedDocuments());
 		plugin.registerEvent(this.app.workspace.on('active-leaf-change', () => {
 			this.selectionFromKeyboard = true;
 			this.hide();
@@ -47,20 +51,23 @@ export class SelectionToolbarManager {
 	}
 
 	createEditorExtension() {
-		const manager = this;
+		const editorCreated = (view: EditorView) => this.editorCreated(view);
+		const editorUpdated = (view: EditorView) => this.updateEditorSelection(view);
+		const editorDestroyed = (view: EditorView) => this.editorDestroyed(view);
 		return ViewPlugin.fromClass(class {
 			constructor(private readonly view: EditorView) {
-				manager.updateEditorSelection(view);
+				editorCreated(view);
+				editorUpdated(view);
 			}
 
 			update(update: ViewUpdate): void {
 				if (update.selectionSet || update.docChanged || update.focusChanged) {
-					manager.updateEditorSelection(this.view);
+					editorUpdated(this.view);
 				}
 			}
 
 			destroy(): void {
-				manager.editorDestroyed(this.view);
+				editorDestroyed(this.view);
 			}
 		});
 	}
@@ -80,10 +87,12 @@ export class SelectionToolbarManager {
 	}
 
 	hide(): void {
+		const previousOwnerEditorView = this.ownerEditorView;
 		this.cancelPositionFrame();
 		this.owner = null;
 		this.ownerEditorView = null;
 		this.toolbarEl?.removeClass('is-visible');
+		this.restoreToolbarToDefaultHost(previousOwnerEditorView);
 	}
 
 	destroy(): void {
@@ -94,6 +103,7 @@ export class SelectionToolbarManager {
 		this.owner = null;
 		this.ownerEditorView = null;
 		this.pendingEditorView = null;
+		this.clearTrackedDocuments();
 	}
 
 	private readonly handlePointerDown = (event: PointerEvent): void => {
@@ -200,35 +210,45 @@ export class SelectionToolbarManager {
 	private editorDestroyed(view: EditorView): void {
 		if (this.ownerEditorView === view) this.hide();
 		if (this.pendingEditorView === view) this.pendingEditorView = null;
+		this.releaseDocument(view.dom.ownerDocument);
 	}
 
 	private scheduleShow(rect: SelectionRect): void {
 		this.cancelPositionFrame();
-		this.positionFrame = this.win.requestAnimationFrame(() => {
+		const frameWindow = this.getEditorWindow(this.ownerEditorView);
+		this.positionFrameWindow = frameWindow;
+		this.positionFrame = frameWindow.requestAnimationFrame(() => {
 			this.positionFrame = null;
+			this.positionFrameWindow = null;
 			this.show(rect);
 		});
 	}
 
 	private show(selectionRect: SelectionRect): void {
-		const toolbarEl = this.ensureToolbar();
-		if (!toolbarEl || !this.owner) return;
+		const ownerEditorView = this.ownerEditorView;
+		if (!ownerEditorView?.dom.isConnected || !this.owner) {
+			this.hide();
+			return;
+		}
+		const toolbarEl = this.ensureToolbar(ownerEditorView);
+		if (!toolbarEl) return;
 
 		toolbarEl.removeClass('is-visible');
 		const toolbarRect = toolbarEl.getBoundingClientRect();
+		const ownerWindow = this.getEditorWindow(ownerEditorView);
 		const viewportPadding = 8;
 		const gap = 8;
 		const centeredLeft = selectionRect.left + (selectionRect.right - selectionRect.left) / 2 - toolbarRect.width / 2;
 		const left = Math.min(
 			Math.max(viewportPadding, centeredLeft),
-			Math.max(viewportPadding, this.win.innerWidth - toolbarRect.width - viewportPadding),
+			Math.max(viewportPadding, ownerWindow.innerWidth - toolbarRect.width - viewportPadding),
 		);
 		const aboveTop = selectionRect.top - toolbarRect.height - gap;
 		const top = aboveTop >= viewportPadding
 			? aboveTop
 			: Math.min(
 				selectionRect.bottom + gap,
-				this.win.innerHeight - toolbarRect.height - viewportPadding,
+				ownerWindow.innerHeight - toolbarRect.height - viewportPadding,
 			);
 
 		toolbarEl.setCssProps({
@@ -238,12 +258,15 @@ export class SelectionToolbarManager {
 		toolbarEl.addClass('is-visible');
 	}
 
-	private ensureToolbar(): HTMLElement | null {
+	private ensureToolbar(ownerEditorView: EditorView): HTMLElement | null {
 		if (this.items.length === 0) return null;
-		if (this.toolbarEl?.isConnected) return this.toolbarEl;
+		const hostEl = this.resolveToolbarHost(ownerEditorView);
+		if (this.toolbarEl) {
+			this.moveToolbarToHost(hostEl);
+			return this.toolbarEl;
+		}
 
-		const ownerDocument = this.app.workspace.containerEl.ownerDocument;
-		const toolbarEl = ownerDocument.body.createDiv({
+		const toolbarEl = hostEl.createDiv({
 			cls: 'basic-vault-selection-toolbar',
 			attr: { role: 'toolbar', 'aria-label': '选中文本工具栏' },
 		});
@@ -270,11 +293,100 @@ export class SelectionToolbarManager {
 
 	private cancelPositionFrame(): void {
 		if (this.positionFrame === null) return;
-		this.win.cancelAnimationFrame(this.positionFrame);
+		this.positionFrameWindow?.cancelAnimationFrame(this.positionFrame);
 		this.positionFrame = null;
+		this.positionFrameWindow = null;
 	}
 
-	private get win(): Window {
-		return this.app.workspace.containerEl.ownerDocument.defaultView ?? window;
+	private editorCreated(view: EditorView): void {
+		this.trackDocument(view.dom.ownerDocument);
+	}
+
+	private trackDocument(ownerDocument: Document, persistent = false): void {
+		const trackedDocument = this.trackedDocuments.get(ownerDocument);
+		if (trackedDocument) {
+			trackedDocument.persistent ||= persistent;
+			if (!persistent && !trackedDocument.persistent) {
+				trackedDocument.editorCount += 1;
+			}
+			return;
+		}
+
+		const AbortControllerConstructor = ownerDocument.defaultView?.AbortController ?? AbortController;
+		const abortController = new AbortControllerConstructor();
+		const options = { signal: abortController.signal };
+		ownerDocument.addEventListener('pointerdown', this.handlePointerDown, options);
+		ownerDocument.addEventListener('pointerup', this.handlePointerUp, options);
+		ownerDocument.addEventListener('pointercancel', this.handlePointerCancel, options);
+		ownerDocument.addEventListener('keydown', this.handleKeyDown, options);
+		ownerDocument.addEventListener('scroll', this.handleViewportChange, {
+			capture: true,
+			signal: abortController.signal,
+		});
+		ownerDocument.defaultView?.addEventListener('resize', this.handleViewportChange, options);
+		this.trackedDocuments.set(ownerDocument, {
+			abortController,
+			editorCount: persistent ? 0 : 1,
+			persistent,
+		});
+	}
+
+	private releaseDocument(ownerDocument: Document): void {
+		const trackedDocument = this.trackedDocuments.get(ownerDocument);
+		if (!trackedDocument || trackedDocument.persistent) return;
+		trackedDocument.editorCount = Math.max(0, trackedDocument.editorCount - 1);
+		if (trackedDocument.editorCount > 0) return;
+		trackedDocument.abortController.abort();
+		this.trackedDocuments.delete(ownerDocument);
+		if (this.toolbarEl?.ownerDocument === ownerDocument) {
+			this.moveToolbarToHost(this.getMainDocument().body);
+		}
+	}
+
+	private clearTrackedDocuments(): void {
+		for (const trackedDocument of this.trackedDocuments.values()) {
+			trackedDocument.abortController.abort();
+		}
+		this.trackedDocuments.clear();
+	}
+
+	private resolveToolbarHost(ownerEditorView: EditorView): HTMLElement {
+		const ownerDocument = ownerEditorView.dom.ownerDocument;
+		const modalContainerEl = ownerEditorView.dom.closest<HTMLElement>('.modal-container');
+		if (modalContainerEl?.isConnected) return modalContainerEl;
+		return ownerDocument.body;
+	}
+
+	private restoreToolbarToDefaultHost(ownerEditorView: EditorView | null): void {
+		if (!this.toolbarEl) return;
+		this.moveToolbarToHost(this.getDefaultHost(ownerEditorView));
+	}
+
+	private getDefaultHost(ownerEditorView: EditorView | null): HTMLElement {
+		const ownerDocument = ownerEditorView?.dom.ownerDocument;
+		const ownerWindow = ownerDocument?.defaultView;
+		if (
+			ownerDocument?.body.isConnected &&
+			(!ownerWindow || !ownerWindow.closed)
+		) {
+			return ownerDocument.body;
+		}
+		return this.getMainDocument().body;
+	}
+
+	private moveToolbarToHost(hostEl: HTMLElement): void {
+		if (!this.toolbarEl) return;
+		const safeHostEl = hostEl.isConnected ? hostEl : this.getMainDocument().body;
+		if (this.toolbarEl.parentElement === safeHostEl) return;
+		safeHostEl.appendChild(this.toolbarEl);
+	}
+
+	private getEditorWindow(ownerEditorView: EditorView | null): Window {
+		return ownerEditorView?.dom.ownerDocument.defaultView ??
+			this.getMainDocument().defaultView ?? window;
+	}
+
+	private getMainDocument(): Document {
+		return this.app.workspace.containerEl.ownerDocument;
 	}
 }
