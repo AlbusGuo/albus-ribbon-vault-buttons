@@ -37,6 +37,7 @@ function normalizeIconName(iconName: unknown): string {
  */
 export function createCustomButton(): CustomButton {
 	return {
+		kind: 'button',
 		icon: 'plus',
 		toggleIcon: 'plus',
 		tooltip: '新按钮',
@@ -44,7 +45,6 @@ export function createCustomButton(): CustomButton {
 		command: '',
 		file: '',
 		url: '',
-		commands: [],
 		groupItems: [],
 	};
 }
@@ -55,8 +55,9 @@ export function createCustomButton(): CustomButton {
 export function createButtonGroup(): CustomButton {
 	return {
 		...createCustomButton(),
+		kind: 'group',
 		tooltip: '新按钮组',
-		type: 'button-group',
+		groupItems: [],
 	};
 }
 
@@ -100,52 +101,64 @@ function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonV
 			: DEFAULT_SETTINGS.settingsTab
 	};
 
-	const normalizeButton = (item: unknown, allowButtonGroup = true): CustomButton | null => {
+	const normalizeButton = (item: unknown, allowGroupItems = true): CustomButton | null => {
 		if (!item || typeof item !== 'object' || Array.isArray(item)) {
 			return null;
 		}
 
 		const candidate = item as Partial<CustomButton>;
-		if (
-			candidate.type !== 'command' &&
-			candidate.type !== 'command-group' &&
-			candidate.type !== 'file' &&
-			candidate.type !== 'url' &&
-			(!allowButtonGroup || candidate.type !== 'button-group')
-		) {
-			return null;
-		}
+		const rawType = (item as { type?: unknown }).type;
+		const legacyGroup = rawType === 'button-group';
+		const legacyCommands = Array.isArray((item as { commands?: unknown }).commands)
+			? (item as { commands: unknown[] }).commands.filter(
+				(commandId): commandId is string => typeof commandId === 'string' && commandId.length > 0,
+			)
+			: [];
+		const normalizedType = (() => {
+			switch (rawType) {
+				case 'command':
+				case 'file':
+				case 'url':
+					return rawType;
+				case 'command-group':
+				case 'button-group':
+					return allowGroupItems || rawType === 'command-group' ? 'command' : null;
+				default:
+					return null;
+			}
+		})();
+		if (!normalizedType) return null;
+		const normalizedKind = allowGroupItems && (
+			candidate.kind === 'group' ||
+			legacyGroup ||
+			(candidate.kind === undefined && Array.isArray(candidate.groupItems) && candidate.groupItems.length > 0)
+		)
+			? 'group'
+			: 'button';
 
 		const button: CustomButton = {
+			kind: normalizedKind,
 			icon: normalizeIconName(candidate.icon),
 			toggleIcon: normalizeIconName(candidate.toggleIcon || candidate.icon),
 			tooltip: typeof candidate.tooltip === 'string' ? candidate.tooltip : '未命名按钮',
-			type: candidate.type,
-			command: typeof candidate.command === 'string' ? candidate.command : '',
+			type: normalizedType,
+			command: rawType === 'command-group'
+				? legacyCommands[0] ?? ''
+				: typeof candidate.command === 'string' ? candidate.command : '',
 			file: typeof candidate.file === 'string' ? candidate.file : '',
 			url: typeof candidate.url === 'string' ? candidate.url : '',
-			commands: Array.isArray(candidate.commands)
-				? candidate.commands.filter((commandId): commandId is string => typeof commandId === 'string')
-				: [],
 			groupItems: [],
 		};
-		const rawGroupItems = candidate.type === 'button-group' ? candidate.groupItems : [];
+		const rawGroupItems = normalizedKind === 'group' ? candidate.groupItems : [];
 		if (Array.isArray(rawGroupItems)) {
 			button.groupItems = rawGroupItems
 				.map((groupItem) => normalizeButton(groupItem, false))
 				.filter((groupItem): groupItem is CustomButton => groupItem !== null);
 		}
 
-		if (button.type === 'button-group') {
-			button.toggleIcon = button.icon;
-			button.command = '';
-			button.file = '';
-			button.url = '';
-			button.commands = [];
-		} else if (typeof candidate.iconState === 'boolean') {
+		if (typeof candidate.iconState === 'boolean') {
 			button.iconState = candidate.iconState;
 		}
-
 		return button;
 	};
 

@@ -1,7 +1,7 @@
 import { App, Plugin, PluginSettingTab, Setting, SettingGroup, setIcon, setTooltip } from 'obsidian';
 import { CustomButton, RibbonVaultButtonsSettings } from '../types';
 import { createButtonGroup, createCustomButton, createDivider } from '../settings';
-import { ButtonEditorModal } from '../modals/buttonEditorModal';
+import { ButtonStudioModal } from '../modals/buttonStudioModal';
 import { ConfirmModal } from '../modals/confirmModal';
 import { getRegisteredCommands } from '../utils/commandRegistry';
 import { PointerSortController, PointerSortItem } from '../utils/pointerSortController';
@@ -156,6 +156,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		const items = this.getItems(area);
 		const itemsGroup = new SettingGroup(contentEl);
 		const sortableItems: PointerSortItem[] = [];
+		this.renderAddItemSetting(itemsGroup, area);
 
 		if (items.length === 0) {
 			itemsGroup.addSetting((setting) => {
@@ -163,8 +164,8 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 				setting
 					.setName(`还没有添加${this.getAreaLabel(area)}项目`)
 					.setDesc(supportsDivider
-						? `点击下方按钮开始创建按钮, 按钮组或分割线`
-						: `点击下方按钮开始创建按钮或按钮组`);
+						? `使用上方操作创建按钮, 按钮组或分割线`
+						: `使用上方操作创建按钮或按钮组`);
 			});
 		} else {
 			items.forEach((item, index) => {
@@ -177,40 +178,6 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 				this.createButtonSetting(itemsGroup, item, index, area, sortableItems);
 			});
 		}
-
-		itemsGroup.addSetting((addSetting) => {
-			addSetting.settingEl.addClass('basic-vault-item-add-setting');
-			addSetting.controlEl.addClass('basic-vault-item-add-container');
-
-			addSetting.addButton((button) => {
-				button
-					.setButtonText('添加按钮')
-					.setClass('basic-vault-item-add-btn')
-					.onClick(() => {
-						void this.addCustomButton(area);
-					});
-			});
-
-			addSetting.addButton((button) => {
-				button
-					.setButtonText('添加按钮组')
-					.setClass('basic-vault-item-add-btn')
-					.onClick(() => {
-						void this.addButtonGroup(area);
-					});
-			});
-
-			if (area !== 'page-header') {
-				addSetting.addButton((button) => {
-					button
-						.setButtonText('添加分割线')
-						.setClass('basic-vault-item-add-btn')
-						.onClick(() => {
-							void this.addDivider(area);
-						});
-				});
-			}
-		});
 
 		const groupItemsEl = sortableItems[0]?.element.parentElement;
 		if (sortableItems.length > 1 && groupItemsEl) {
@@ -227,6 +194,43 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 				onError: (error) => console.error('Failed to reorder settings items', error),
 			});
 		}
+	}
+
+	private renderAddItemSetting(group: SettingGroup, area: ButtonArea): void {
+		group.addSetting((setting) => {
+			setting
+				.setName('添加项目')
+				.setDesc(area === 'page-header'
+					? '添加按钮或按钮组'
+					: '添加按钮, 按钮组或分割线');
+			setting.settingEl.addClass('basic-vault-item-create-setting');
+			this.addCreateTextButton(setting, 'plus-circle', '添加按钮', () => {
+				void this.addCustomButton(area);
+			});
+			this.addCreateTextButton(setting, 'layers', '添加按钮组', () => {
+				void this.addButtonGroup(area);
+			});
+			if (area !== 'page-header') {
+				this.addCreateTextButton(setting, 'minus', '添加分割线', () => {
+					void this.addDivider(area);
+				});
+			}
+		});
+	}
+
+	private addCreateTextButton(
+		setting: Setting,
+		icon: string,
+		label: string,
+		onClick: () => void,
+	): void {
+		const buttonEl = setting.controlEl.createEl('button', {
+			cls: ['clickable-icon', 'basic-vault-item-create-action'],
+			attr: { type: 'button', 'aria-label': label },
+		});
+		setIcon(buttonEl, icon);
+		buttonEl.createSpan({ text: label });
+		buttonEl.addEventListener('click', onClick);
 	}
 
 	private renderNoteToolbarPosition(contentEl: HTMLElement): void {
@@ -320,7 +324,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		this.display();
 
 		const index = this.getItems(area).length - 1;
-		this.openButtonEditor(area, index, true);
+		this.openButtonStudio(area, index, true);
 	}
 
 	private async addButtonGroup(area: ButtonArea) {
@@ -331,7 +335,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		this.display();
 
 		const index = this.getItems(area).length - 1;
-		this.openButtonEditor(area, index, true);
+		this.openButtonStudio(area, index, true);
 	}
 
 	private async addDivider(area: Exclude<ButtonArea, 'page-header'>) {
@@ -355,7 +359,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		}
 
 		const isDivider = item.type === 'divider';
-		const isButtonGroup = !isDivider && item.type === 'button-group';
+		const isButtonGroup = !isDivider && item.kind === 'group';
 		const confirmed = await ConfirmModal.confirm(this.app, {
 			title: isDivider ? '删除分割线' : isButtonGroup ? '删除按钮组' : '删除按钮',
 			message: isDivider
@@ -382,7 +386,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 	): void {
 		actionsGroup.addSetting((setting) => {
 			setting.settingEl.addClass('basic-vault-button-setting');
-			const isButtonGroup = button.type === 'button-group';
+			const isButtonGroup = button.kind === 'group';
 			setting.setName(button.tooltip.trim() || (isButtonGroup ? '未命名按钮组' : '未命名按钮'));
 			setting.setDesc(this.getButtonSummary(button));
 			this.decorateButtonName(setting, button);
@@ -392,7 +396,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 					.setIcon('pencil')
 					.setTooltip(isButtonGroup ? '编辑按钮组' : '编辑按钮')
 					.onClick(() => {
-						this.openButtonEditor(area, index);
+						this.openButtonStudio(area, index);
 					}))
 				.addExtraButton((extraButton) => extraButton
 					.setIcon('trash')
@@ -406,13 +410,13 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		});
 	}
 
-	private openButtonEditor(area: ButtonArea, index: number, refreshOnClose: boolean = true) {
+	private openButtonStudio(area: ButtonArea, index: number, refreshOnClose: boolean = true) {
 		const item = this.getItems(area)[index];
 		if (!item || item.type === 'divider') {
 			return;
 		}
 
-		new ButtonEditorModal(this.app, item, {
+		new ButtonStudioModal(this.app, item, {
 			customIconsIntegration: this.plugin.customIconsIntegration,
 			onChange: async (savedButton) => {
 				this.getItems(area)[index] = savedButton;
@@ -434,7 +438,7 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		const primaryIconName = button.icon || 'help-circle';
 		const toggleIconName = button.toggleIcon || primaryIconName;
 		const shouldAnimateToggle =
-			button.type !== 'button-group' && primaryIconName !== toggleIconName;
+			button.kind === 'button' && primaryIconName !== toggleIconName;
 		const iconWrapEl = nameWrapEl.createSpan({ cls: 'basic-vault-button-name-icon' });
 		const iconStackEl = iconWrapEl.createSpan({ cls: 'basic-vault-button-name-icon-stack' });
 		const previewEl = iconStackEl.createSpan({ cls: 'basic-vault-button-name-icon-layer' });
@@ -540,13 +544,11 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 	}
 
 	private getButtonSummary(button: CustomButton): string {
-		if (button.type === 'button-group') return `按钮组 - ${button.groupItems.length} 项`;
+		if (button.kind === 'group') return `按钮组 - ${button.groupItems.length} 项`;
 		const target = (() => {
 			switch (button.type) {
 				case 'command':
 					return this.getCommandDisplayName(button.command);
-				case 'command-group':
-					return this.getCommandGroupSummary(button.commands);
 				case 'file':
 					return button.file || '未设置文件';
 				case 'url':
@@ -561,14 +563,10 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		switch (type) {
 			case 'command':
 				return '命令';
-			case 'command-group':
-				return '命令组';
 			case 'file':
 				return '文件';
 			case 'url':
 				return '网址';
-			case 'button-group':
-				return '按钮组';
 		}
 	}
 
@@ -602,18 +600,6 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		});
 		setIcon(dragHandle, 'grip-vertical');
 		return dragHandle;
-	}
-
-	private getCommandGroupSummary(commandIds: string[]): string {
-		const names = commandIds
-			.map((commandId) => this.getCommandDisplayName(commandId))
-			.filter((name) => name !== '未设置命令');
-
-		if (names.length === 0) {
-			return '未设置命令组';
-		}
-
-		return names.join(',');
 	}
 
 	private getCommandDisplayName(commandId: string): string {

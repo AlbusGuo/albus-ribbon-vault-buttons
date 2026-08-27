@@ -160,253 +160,31 @@
   height: 16px;
 }
 
-/* 添加按钮区域 */
-.basic-vault-item-add-setting {
-  padding: 0;
-  border-top: none;
-  min-height: auto;
-}
-
-.basic-vault-item-add-setting .setting-item-info {
-  display: none;
-}
-
-.basic-vault-item-add-setting .setting-item-control {
-  width: 100%;
-  margin-left: 0;
-  padding-top: 0;
-}
-
-.basic-vault-item-add-container {
+.basic-vault-item-create-setting .setting-item-control {
   display: flex;
-  gap: 0.75em;
-  width: 100%;
-  margin: 0;
-  padding-top: 0;
+  justify-content: flex-end;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 0;
+  width: auto;
+  min-width: 0;
+  overflow: visible;
 }
 
-.basic-vault-item-add-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.375em;
-  background-color: var(--interactive-accent);
-  color: var(--text-on-accent);
-  border: none;
-  border-radius: var(--radius-s);
-  padding: 0.5em 0.75em;
-  cursor: pointer;
-  font-size: var(--font-ui-small);
-  font-weight: 500;
-  flex: 1;
-}
-
-.basic-vault-item-add-btn:hover {
-  background-color: var(--interactive-accent-hover);
-}
-
-.basic-vault-button-editor-modal-shell {
-  border-radius: 12px;
-  width: min(620px, calc(100vw - 24px));
-  max-width: min(620px, calc(100vw - 24px));
-}
-
-.basic-vault-button-editor-modal {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-}
-
-.basic-vault-button-editor-icon-button {
+.basic-vault-item-create-action.clickable-icon {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background-color: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  box-shadow: none;
-}
-
-.basic-vault-button-editor-icon-button:hover {
-  background-color: var(--background-modifier-hover);
-  color: var(--text-normal);
-}
-
-.basic-vault-button-editor-icon-button svg {
-  width: 14px;
-  height: 14px;
-}
-
-.basic-vault-button-editor-form-row {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  align-items: center;
-  column-gap: 10px;
-  min-width: 0;
-}
-
-.basic-vault-button-editor-compact-row {
-  display: grid;
-  grid-template-columns: 72px 48px 72px 48px 72px max-content;
-  align-items: center;
-  column-gap: 10px;
-  min-width: 0;
-}
-
-.basic-vault-button-editor-label {
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  width: 72px;
-  min-width: 72px;
-  text-align: left;
-}
-
-.basic-vault-button-editor-control {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.basic-vault-button-editor-select,
-.basic-vault-button-editor-input {
-  min-width: 0;
-  height: var(--input-height);
-  border-radius: var(--input-radius);
-}
-
-.basic-vault-button-editor-name-input,
-.basic-vault-button-editor-value-input {
-  flex: 1 1 180px;
-}
-
-.basic-vault-button-editor-picker-input {
-  cursor: pointer;
-}
-
-.basic-vault-button-editor-icon-field {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--input-height);
-  min-width: 0;
-}
-
-.basic-vault-button-editor-native-select {
-  flex: 0 0 auto;
-  width: fit-content;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.basic-vault-button-editor-command-group {
-  display: flex;
-  flex: 1 1 100%;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.basic-vault-button-editor-text-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  width: fit-content;
-  padding: 0 10px;
-  height: 28px;
-  border-radius: 8px;
-  font-size: 12px;
-  background-color: transparent;
-  border: 1px solid var(--background-modifier-border);
-  color: var(--text-muted);
-}
-
-.basic-vault-button-editor-text-button:hover {
-  color: var(--text-normal);
-  border-color: var(--background-modifier-border-hover, var(--interactive-accent));
-  background-color: var(--background-modifier-hover);
-}
-
-.basic-vault-button-editor-compact-row.is-button-group {
-  grid-template-columns: 72px 48px;
-}
-
-.basic-vault-button-group-editor {
-  display: flex;
-  flex: 1 1 100%;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.basic-vault-button-group-help {
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-}
-
-.basic-vault-button-group-list {
-  display: flex;
-  flex-direction: column;
   gap: 4px;
-  max-height: min(30vh, 260px);
-  overflow-y: auto;
-}
-
-.basic-vault-button-group-item-row {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) max-content;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 5px 6px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-}
-
-.basic-vault-button-group-item-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: var(--text-muted);
-}
-
-.basic-vault-button-group-item-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.basic-vault-button-group-item-info {
-  min-width: 0;
-}
-
-.basic-vault-button-group-item-name,
-.basic-vault-button-group-item-summary {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: auto;
+  height: 28px;
+  margin: 0;
+  padding: 4px 8px;
   white-space: nowrap;
 }
 
-.basic-vault-button-group-item-name {
-  color: var(--text-normal);
-  font-size: var(--font-ui-small);
-}
-
-.basic-vault-button-group-item-summary {
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-}
-
-.basic-vault-button-group-item-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
+.basic-vault-item-create-action.clickable-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 .basic-vault-confirm-modal {
@@ -432,73 +210,11 @@
   gap: 8px;
 }
 
-.basic-vault-button-command-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.basic-vault-button-command-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.basic-vault-button-command-index {
-  width: 20px;
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  text-align: center;
-  flex: 0 0 auto;
-}
-
-.basic-vault-button-command-input {
-  flex: 1 1 auto;
-}
-
-.basic-vault-button-command-empty {
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  padding: 6px 0;
-}
-
 .basic-vault-page-header-button {
   order: -1000;
 }
 
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .basic-vault-item-add-container {
-    flex-direction: column;
-  }
-  
-  .basic-vault-item-add-btn {
-    width: 100%;
-    justify-content: center;
-  }
-}
-
 @media (max-width: 600px) {
-  .basic-vault-button-editor-form-row {
-    grid-template-columns: 1fr;
-    row-gap: 6px;
-  }
-
-  .basic-vault-button-editor-compact-row {
-    grid-template-columns: 1fr;
-    row-gap: 6px;
-  }
-
-  .basic-vault-button-editor-label {
-    width: auto;
-    min-width: 0;
-  }
-
-  .basic-vault-button-editor-native-select {
-    width: fit-content;
-  }
-
   .basic-vault-button-setting .setting-item-info {
     max-width: 100%;
   }

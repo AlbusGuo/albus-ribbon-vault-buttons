@@ -1,0 +1,209 @@
+.basic-vault-button-studio-modal-shell {
+  width: min(660px, calc(100vw - 24px));
+  max-width: min(660px, calc(100vw - 24px));
+}
+
+.basic-vault-button-studio {
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+  box-sizing: border-box;
+}
+
+.basic-vault-button-studio > .setting-item {
+  min-height: 48px;
+  padding: 8px 0;
+}
+
+.basic-vault-button-studio > .setting-item > .setting-item-info {
+  flex: 0 0 190px;
+  min-width: 0;
+}
+
+.basic-vault-button-studio > .setting-item > .setting-item-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.basic-vault-button-studio > .setting-item > .setting-item-control input[type='text'] {
+  width: 100%;
+  min-width: 0;
+}
+
+.basic-vault-button-studio-icon-picker.clickable-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+}
+
+.basic-vault-button-studio-icon-preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.basic-vault-button-studio-icon-preview svg {
+  width: 16px;
+  height: 16px;
+}
+
+.basic-vault-button-studio-picker-input {
+  cursor: pointer;
+}
+
+.basic-vault-button-group-form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.basic-vault-button-group-form-row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-height: 48px;
+  padding: 8px 0;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.basic-vault-button-group-form-row:first-child {
+  border-top: 0;
+}
+
+.basic-vault-button-group-form-row.is-list {
+  align-items: start;
+}
+
+.basic-vault-button-group-form-info,
+.basic-vault-button-group-form-control {
+  min-width: 0;
+}
+
+.basic-vault-button-group-form-name,
+.basic-vault-button-group-item-name {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  line-height: 1.4;
+}
+
+.basic-vault-button-group-form-description,
+.basic-vault-button-group-item-description,
+.basic-vault-button-group-empty {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: var(--line-height-tight);
+  overflow-wrap: anywhere;
+}
+
+.basic-vault-button-group-form-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.basic-vault-button-group-form-control > input[type='text'] {
+  width: 100%;
+  min-width: 0;
+}
+
+.basic-vault-button-group-list,
+.basic-vault-button-group-items {
+  width: 100%;
+  min-width: 0;
+}
+
+.basic-vault-button-group-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.basic-vault-button-group-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.basic-vault-button-group-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.basic-vault-button-group-item-info {
+  min-width: 0;
+}
+
+.basic-vault-button-group-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.basic-vault-button-group-drag-handle {
+  touch-action: none;
+}
+
+.basic-vault-button-group-empty {
+  padding: 10px 0;
+}
+
+.basic-vault-button-group-add.clickable-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 30px;
+  padding: 4px 8px;
+  border: 0;
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.basic-vault-button-group-add.clickable-icon:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .basic-vault-button-studio > .setting-item {
+    align-items: initial;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .basic-vault-button-studio > .setting-item > .setting-item-info {
+    flex-basis: auto;
+  }
+
+  .basic-vault-button-studio > .setting-item > .setting-item-control {
+    width: 100%;
+  }
+
+  .basic-vault-button-group-form-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .basic-vault-button-group-form-control {
+    justify-content: flex-start;
+  }
+}

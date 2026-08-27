@@ -170,7 +170,7 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 		const collectButton = (button: Exclude<ButtonItem, { type: 'divider' }>): void => {
 			collect(button.icon);
 			collect(button.toggleIcon || button.icon);
-			if (button.type === 'button-group') {
+			if (button.kind === 'group') {
 				for (const groupItem of button.groupItems) {
 					collect(groupItem.icon);
 					collect(groupItem.toggleIcon || groupItem.icon);

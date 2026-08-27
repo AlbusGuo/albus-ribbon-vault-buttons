@@ -16,7 +16,7 @@ export class ButtonGroupMenuManager {
 	) {}
 
 	bind(sourceEl: HTMLElement, button: CustomButton, area: ButtonGroupArea): void {
-		if (button.type !== 'button-group') return;
+		if (button.kind !== 'group') return;
 		sourceEl.addClass('basic-vault-has-button-group', `is-${area}`);
 		sourceEl.setAttribute('aria-haspopup', 'menu');
 		sourceEl.setAttribute('aria-expanded', 'false');
@@ -39,7 +39,7 @@ export class ButtonGroupMenuManager {
 	}
 
 	openIfPresent(sourceEl: HTMLElement, button: CustomButton, area: ButtonGroupArea): boolean {
-		if (button.type !== 'button-group') return false;
+		if (button.kind !== 'group') return false;
 		if (button.groupItems.length === 0) return true;
 		this.clearHoverTimer(sourceEl);
 		this.show(sourceEl, button.groupItems, area, true);

@@ -154,7 +154,7 @@ export class ButtonManager {
 		
 		this.buttonConfigs.set(buttonId, button);
 
-		const savedState = button.type !== 'button-group' && (button.iconState || false);
+		const savedState = button.kind === 'button' && (button.iconState || false);
 		this.toggleStates.set(buttonId, savedState);
 
 		const initialIcon = savedState ? (button.toggleIcon || button.icon) : button.icon;
@@ -289,11 +289,6 @@ export class ButtonManager {
 					this.executeCommand(button.command);
 				}
 				break;
-			case 'command-group':
-				if (button.commands.length > 0) {
-					await this.executeCommandGroup(button.commands);
-				}
-				break;
 			case 'file':
 				if (button.file) {
 					this.openFile(button.file);
@@ -304,24 +299,6 @@ export class ButtonManager {
 					this.openUrl(button.url);
 				}
 				break;
-			case 'button-group':
-				break;
-		}
-	}
-
-	private async executeCommandGroup(commandIds: string[]) {
-		for (const commandId of commandIds) {
-			if (!commandId) {
-				continue;
-			}
-
-			try {
-				await Promise.resolve(
-					this.internalApp.commands.executeCommandById(commandId)
-				);
-			} catch {
-				// 单个命令失败时继续后续命令, 避免整组中断
-			}
 		}
 	}
 

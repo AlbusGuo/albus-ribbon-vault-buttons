@@ -1,7 +1,8 @@
 /**
  * 自定义按钮类型
  */
-export type ButtonType = 'command' | 'file' | 'url' | 'command-group' | 'button-group';
+export type ButtonType = 'command' | 'file' | 'url';
+export type ButtonKind = 'button' | 'group';
 export type ButtonGroupTrigger = 'click' | 'hover';
 
 /**
@@ -18,6 +19,8 @@ export interface DividerItem {
  * 自定义按钮配置
  */
 export interface CustomButton {
+	/** 项目形态: 普通按钮或按钮组 */
+	kind: ButtonKind;
 	/** 图标名称 */
 	icon: string;
 	/** 切换后的图标名称 */
@@ -32,8 +35,6 @@ export interface CustomButton {
 	file: string;
 	/** 网址 */
 	url: string;
-	/** 命令组, 按顺序依次执行 */
-	commands: string[];
 	/** 图标显示状态: true 表示显示切换图标, false 或 undefined 表示显示主图标 */
 	iconState?: boolean;
 	/** 按钮组成员, 仅支持一层 */

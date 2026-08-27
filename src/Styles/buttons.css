@@ -1,41 +1,5 @@
 /* 按钮相关样式 */
 
-/* 紧凑型图标选择器样式 */
-.icon-picker-button-compact {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
-  width: 32px;
-  height: 28px;
-  padding: 4px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
-  background-color: var(--background-primary);
-  cursor: pointer;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.icon-picker-button-compact:hover {
-  background-color: var(--background-modifier-hover);
-  border-color: var(--interactive-accent);
-}
-
-.icon-picker-preview-compact {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: var(--text-normal);
-}
-
-.icon-picker-preview-compact svg {
-  width: 16px;
-  height: 16px;
-}
-
 /* 分割线样式 */
 .custom-ribbon-divider {
   position: relative;
