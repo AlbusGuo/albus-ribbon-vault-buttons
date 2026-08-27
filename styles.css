@@ -515,10 +515,6 @@ body.crb-hide-default-actions .side-dock-actions {
   height: 16px;
 }
 
-.basic-vault-button-studio-picker-input {
-  cursor: pointer;
-}
-
 .basic-vault-button-group-form {
   display: flex;
   flex-direction: column;

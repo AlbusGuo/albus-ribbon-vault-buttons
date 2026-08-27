@@ -41,6 +41,7 @@ export class ButtonStudioModal {
 				);
 				if (this.draft.kind === 'group') {
 					this.panel = new ButtonGroupPanel(
+						this.app,
 						this.draft,
 						this.iconService,
 						{

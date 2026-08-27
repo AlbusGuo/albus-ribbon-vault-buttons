@@ -1,6 +1,7 @@
-import { setIcon, setTooltip } from 'obsidian';
+import { App, setIcon, setTooltip } from 'obsidian';
 import { createCustomButton } from '../settings';
 import { CustomButton } from '../types';
+import { getRegisteredCommands } from '../utils/commandRegistry';
 import { PointerSortController, PointerSortItem } from '../utils/pointerSortController';
 import { ButtonStudioIconService } from './buttonStudioIconService';
 
@@ -16,6 +17,7 @@ export class ButtonGroupPanel {
 	private sortController: PointerSortController | null = null;
 
 	constructor(
+		private readonly app: App,
 		private readonly group: CustomButton,
 		private readonly iconService: ButtonStudioIconService,
 		private readonly options: ButtonGroupPanelOptions,
@@ -221,9 +223,16 @@ export class ButtonGroupPanel {
 
 	private getButtonSummary(button: CustomButton): string {
 		switch (button.type) {
-			case 'command': return `命令 - ${button.command || '未设置命令'}`;
+			case 'command': return `命令 - ${this.getCommandDisplayName(button.command)}`;
 			case 'file': return `文件 - ${button.file || '未设置文件'}`;
 			case 'url': return `网址 - ${button.url || '未设置网址'}`;
 		}
+	}
+
+	private getCommandDisplayName(commandId: string): string {
+		if (!commandId) return '未设置命令';
+		return getRegisteredCommands(this.app)
+			.find((command) => command.id === commandId)
+			?.name ?? '未找到命令';
 	}
 }

@@ -1,8 +1,8 @@
 import { App, Setting, setTooltip } from 'obsidian';
 import { CustomButton } from '../types';
-import { CommandSuggestModal } from './commandSuggestModal';
-import { FileSuggestModal } from './fileSuggestModal';
+import { getRegisteredCommands } from '../utils/commandRegistry';
 import { ButtonStudioIconService } from './buttonStudioIconService';
+import { CommandInputSuggest, FileInputSuggest } from './buttonTargetSuggest';
 
 interface ButtonEditorPanelOptions {
 	onChange: () => void;
@@ -12,6 +12,7 @@ export class ButtonEditorPanel {
 	private contentEl: HTMLElement | null = null;
 	private nameInputEl: HTMLInputElement | null = null;
 	private togglePreviewEl: HTMLElement | null = null;
+	private targetSuggest: CommandInputSuggest | FileInputSuggest | null = null;
 
 	constructor(
 		private readonly app: App,
@@ -23,6 +24,8 @@ export class ButtonEditorPanel {
 	render(contentEl: HTMLElement): void {
 		this.contentEl = contentEl;
 		this.iconService.clear();
+		this.targetSuggest?.close();
+		this.targetSuggest = null;
 		contentEl.empty();
 		this.nameInputEl = null;
 		this.togglePreviewEl = null;
@@ -82,6 +85,8 @@ export class ButtonEditorPanel {
 	}
 
 	destroy(): void {
+		this.targetSuggest?.close();
+		this.targetSuggest = null;
 		this.contentEl = null;
 		this.nameInputEl = null;
 		this.togglePreviewEl = null;
@@ -94,8 +99,8 @@ export class ButtonEditorPanel {
 					return {
 						name: '命令',
 						description: '选择按钮执行的 Obsidian 命令',
-						placeholder: '选择或输入命令 ID',
-						value: this.button.command,
+						placeholder: '输入命令名称',
+						value: this.getCommandDisplayName(this.button.command),
 					};
 				case 'file':
 					return {
@@ -120,28 +125,41 @@ export class ButtonEditorPanel {
 			.addText((text) => {
 				text
 					.setPlaceholder(config.placeholder)
-					.setValue(config.value)
-					.onChange((value) => {
-						this.setTargetValue(value);
+					.setValue(config.value);
+				if (this.button.type === 'command') {
+					text.onChange((value) => {
+						if (value !== this.getCommandDisplayName(this.button.command)) {
+							this.button.command = '';
+						}
 						this.options.onChange();
 					});
-				if (this.button.type === 'command') {
-					text.inputEl.addClass('basic-vault-button-studio-picker-input');
-					text.inputEl.addEventListener('click', () => {
-						new CommandSuggestModal(this.app, (command) => {
+					this.targetSuggest = new CommandInputSuggest(
+						this.app,
+						text.inputEl,
+						(command) => {
 							this.button.command = command.id;
-							text.setValue(command.id);
+							text.setValue(command.name);
 							this.options.onChange();
-						}).open();
+						},
+					);
+				} else if (this.button.type === 'file') {
+					text.onChange((value) => {
+						this.button.file = value;
+						this.options.onChange();
 					});
-			} else if (this.button.type === 'file') {
-					text.inputEl.addClass('basic-vault-button-studio-picker-input');
-					text.inputEl.addEventListener('click', () => {
-						new FileSuggestModal(this.app, (file) => {
+					this.targetSuggest = new FileInputSuggest(
+						this.app,
+						text.inputEl,
+						(file) => {
 							this.button.file = file.path;
 							text.setValue(file.path);
 							this.options.onChange();
-						}).open();
+						},
+					);
+				} else {
+					text.onChange((value) => {
+						this.button.url = value;
+						this.options.onChange();
 					});
 				}
 			});
@@ -191,12 +209,11 @@ export class ButtonEditorPanel {
 		return previewEl;
 	}
 
-	private setTargetValue(value: string): void {
-		switch (this.button.type) {
-			case 'command': this.button.command = value; break;
-			case 'file': this.button.file = value; break;
-			case 'url': this.button.url = value; break;
-		}
+	private getCommandDisplayName(commandId: string): string {
+		if (!commandId) return '';
+		return getRegisteredCommands(this.app)
+			.find((command) => command.id === commandId)
+			?.name ?? '';
 	}
 
 	private renderCurrentPanel(): void {
