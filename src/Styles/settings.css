@@ -160,33 +160,6 @@
   height: 16px;
 }
 
-.basic-vault-item-create-setting .setting-item-control {
-  display: flex;
-  justify-content: flex-end;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: 0;
-  width: auto;
-  min-width: 0;
-  overflow: visible;
-}
-
-.basic-vault-item-create-action.clickable-icon {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  width: auto;
-  height: 28px;
-  margin: 0;
-  padding: 4px 8px;
-  white-space: nowrap;
-}
-
-.basic-vault-item-create-action.clickable-icon svg {
-  width: 14px;
-  height: 14px;
-}
-
 .basic-vault-confirm-modal {
   display: flex;
   flex-direction: column;

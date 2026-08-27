@@ -7,6 +7,7 @@ import { getRegisteredCommands } from '../utils/commandRegistry';
 import { PointerSortController, PointerSortItem } from '../utils/pointerSortController';
 import { CustomIconsIntegration } from '../integrations/customIconsIntegration';
 import { MorphIconManager } from '../utils/morphIconManager';
+import { isButtonConfigurationComplete } from '../utils/buttonValidation';
 
 type SettingsTabKey = RibbonVaultButtonsSettings['settingsTab'];
 type ButtonArea = Exclude<SettingsTabKey, 'general'>;
@@ -67,7 +68,10 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 
 		this.renderActiveTab(contentEl);
 		this.renderedTab = this.plugin.settings.settingsTab;
-		scrollEl.scrollTop = this.scrollTopByTab.get(this.renderedTab) ?? 0;
+		this.restoreScrollPosition(
+			scrollEl,
+			this.scrollTopByTab.get(this.renderedTab) ?? 0,
+		);
 	}
 
 	hide(): void {
@@ -93,6 +97,13 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		if (!this.renderedTab) return;
 		const scrollEl = this.containerEl.querySelector<HTMLElement>('.basic-vault-settings-scroll');
 		if (scrollEl) this.scrollTopByTab.set(this.renderedTab, scrollEl.scrollTop);
+	}
+
+	private restoreScrollPosition(scrollEl: HTMLElement, scrollTop: number): void {
+		scrollEl.scrollTop = scrollTop;
+		scrollEl.win.requestAnimationFrame(() => {
+			if (scrollEl.isConnected) scrollEl.scrollTop = scrollTop;
+		});
 	}
 
 	private createTabButton(parentEl: HTMLElement, tab: SettingsTabKey, label: string) {
@@ -149,14 +160,11 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 
 		if (area === 'note-toolbar') this.renderNoteToolbarPosition(contentEl);
 		if (area === 'selection-toolbar') this.renderSelectionToolbarOptions(contentEl);
-		if (area === 'note-toolbar' || area === 'selection-toolbar') {
-			new Setting(contentEl).setName('按钮').setHeading();
-		}
+		this.renderButtonsHeading(contentEl, area);
 
 		const items = this.getItems(area);
 		const itemsGroup = new SettingGroup(contentEl);
 		const sortableItems: PointerSortItem[] = [];
-		this.renderAddItemSetting(itemsGroup, area);
 
 		if (items.length === 0) {
 			itemsGroup.addSetting((setting) => {
@@ -164,8 +172,8 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 				setting
 					.setName(`还没有添加${this.getAreaLabel(area)}项目`)
 					.setDesc(supportsDivider
-						? `使用上方操作创建按钮, 按钮组或分割线`
-						: `使用上方操作创建按钮或按钮组`);
+						? `点击标题右侧图标创建按钮, 按钮组或分割线`
+						: `点击标题右侧图标创建按钮或按钮组`);
 			});
 		} else {
 			items.forEach((item, index) => {
@@ -196,41 +204,30 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		}
 	}
 
-	private renderAddItemSetting(group: SettingGroup, area: ButtonArea): void {
-		group.addSetting((setting) => {
-			setting
-				.setName('添加项目')
-				.setDesc(area === 'page-header'
-					? '添加按钮或按钮组'
-					: '添加按钮, 按钮组或分割线');
-			setting.settingEl.addClass('basic-vault-item-create-setting');
-			this.addCreateTextButton(setting, 'plus-circle', '添加按钮', () => {
+	private renderButtonsHeading(contentEl: HTMLElement, area: ButtonArea): void {
+		const heading = new Setting(contentEl)
+			.setName('按钮')
+			.setHeading();
+		heading.addExtraButton((button) => button
+			.setIcon('diamond-plus')
+			.setTooltip('添加按钮')
+			.onClick(() => {
 				void this.addCustomButton(area);
-			});
-			this.addCreateTextButton(setting, 'layers', '添加按钮组', () => {
+			}));
+		heading.addExtraButton((button) => button
+			.setIcon('layers-plus')
+			.setTooltip('添加按钮组')
+			.onClick(() => {
 				void this.addButtonGroup(area);
-			});
-			if (area !== 'page-header') {
-				this.addCreateTextButton(setting, 'minus', '添加分割线', () => {
+			}));
+		if (area !== 'page-header') {
+			heading.addExtraButton((button) => button
+				.setIcon('minus')
+				.setTooltip('添加分割线')
+				.onClick(() => {
 					void this.addDivider(area);
-				});
-			}
-		});
-	}
-
-	private addCreateTextButton(
-		setting: Setting,
-		icon: string,
-		label: string,
-		onClick: () => void,
-	): void {
-		const buttonEl = setting.controlEl.createEl('button', {
-			cls: ['clickable-icon', 'basic-vault-item-create-action'],
-			attr: { type: 'button', 'aria-label': label },
-		});
-		setIcon(buttonEl, icon);
-		buttonEl.createSpan({ text: label });
-		buttonEl.addEventListener('click', onClick);
+				}));
+		}
 	}
 
 	private renderNoteToolbarPosition(contentEl: HTMLElement): void {
@@ -316,26 +313,12 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 
 	}
 
-	private async addCustomButton(area: ButtonArea) {
-		const newButton = createCustomButton();
-		this.getItems(area).push(newButton);
-		await this.plugin.saveSettings();
-		this.plugin.initVaultButtons();
-		this.display();
-
-		const index = this.getItems(area).length - 1;
-		this.openButtonStudio(area, index, true);
+	private addCustomButton(area: ButtonArea): void {
+		this.openNewButtonStudio(area, createCustomButton());
 	}
 
-	private async addButtonGroup(area: ButtonArea) {
-		const buttonGroup = createButtonGroup();
-		this.getItems(area).push(buttonGroup);
-		await this.plugin.saveSettings();
-		this.plugin.initVaultButtons();
-		this.display();
-
-		const index = this.getItems(area).length - 1;
-		this.openButtonStudio(area, index, true);
+	private addButtonGroup(area: ButtonArea): void {
+		this.openNewButtonStudio(area, createButtonGroup());
 	}
 
 	private async addDivider(area: Exclude<ButtonArea, 'page-header'>) {
@@ -419,15 +402,41 @@ export class CustomButtonsSettingTab extends PluginSettingTab {
 		new ButtonStudioModal(this.app, item, {
 			customIconsIntegration: this.plugin.customIconsIntegration,
 			onChange: async (savedButton) => {
+				if (!isButtonConfigurationComplete(savedButton)) return false;
 				this.getItems(area)[index] = savedButton;
 				await this.plugin.saveSettings();
 				this.plugin.initVaultButtons();
+				return true;
 			},
 			onClose: () => {
 				if (refreshOnClose) {
 					this.display();
 				}
 			}
+		}).open();
+	}
+
+	private openNewButtonStudio(area: ButtonArea, draft: CustomButton): void {
+		let savedIndex: number | null = null;
+		new ButtonStudioModal(this.app, draft, {
+			customIconsIntegration: this.plugin.customIconsIntegration,
+			initiallyPersisted: false,
+			onChange: async (savedButton) => {
+				if (!isButtonConfigurationComplete(savedButton)) return false;
+				const items = this.getItems(area);
+				if (savedIndex === null) {
+					savedIndex = items.length;
+					items.push(savedButton);
+				} else if (items[savedIndex]?.type !== 'divider') {
+					items[savedIndex] = savedButton;
+				} else {
+					return false;
+				}
+				await this.plugin.saveSettings();
+				this.plugin.initVaultButtons();
+				return true;
+			},
+			onClose: () => this.display(),
 		}).open();
 	}
 

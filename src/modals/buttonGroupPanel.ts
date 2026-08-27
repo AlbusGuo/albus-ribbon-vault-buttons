@@ -1,5 +1,4 @@
 import { App, setIcon, setTooltip } from 'obsidian';
-import { createCustomButton } from '../settings';
 import { CustomButton } from '../types';
 import { getRegisteredCommands } from '../utils/commandRegistry';
 import { PointerSortController, PointerSortItem } from '../utils/pointerSortController';
@@ -8,6 +7,7 @@ import { ButtonStudioIconService } from './buttonStudioIconService';
 interface ButtonGroupPanelOptions {
 	onChange: () => void;
 	onEditButton: (button: CustomButton, index: number) => void;
+	onAddButton: () => void;
 }
 
 export class ButtonGroupPanel {
@@ -160,13 +160,7 @@ export class ButtonGroupPanel {
 		});
 		setIcon(addButtonEl, 'plus');
 		addButtonEl.createSpan({ text: '添加按钮' });
-		addButtonEl.addEventListener('click', () => {
-			const button = createCustomButton();
-			this.group.groupItems.push(button);
-			this.renderItems();
-			this.options.onChange();
-			this.options.onEditButton(button, this.group.groupItems.length - 1);
-		});
+		addButtonEl.addEventListener('click', this.options.onAddButton);
 
 		if (sortableItems.length > 1) {
 			this.sortController = new PointerSortController({

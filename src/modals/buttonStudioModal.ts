@@ -1,6 +1,8 @@
-import { App } from 'obsidian';
+import { App, Notice } from 'obsidian';
 import { CustomIconsIntegration } from '../integrations/customIconsIntegration';
+import { createCustomButton } from '../settings';
 import { CustomButton } from '../types';
+import { isButtonConfigurationComplete } from '../utils/buttonValidation';
 import { ButtonEditorPanel } from './buttonEditorPanel';
 import { ButtonGroupPanel } from './buttonGroupPanel';
 import { EditorModal } from './editorModal';
@@ -8,8 +10,9 @@ import { ButtonStudioIconService } from './buttonStudioIconService';
 
 interface ButtonStudioModalOptions {
 	customIconsIntegration: CustomIconsIntegration;
-	onChange: (button: CustomButton) => Promise<void>;
+	onChange: (button: CustomButton) => Promise<boolean>;
 	onClose?: () => void;
+	initiallyPersisted?: boolean;
 }
 
 export class ButtonStudioModal {
@@ -18,6 +21,7 @@ export class ButtonStudioModal {
 	private panel: ButtonEditorPanel | ButtonGroupPanel | null = null;
 	private iconService: ButtonStudioIconService | null = null;
 	private lastCommittedState: string;
+	private hasPersistedState: boolean;
 
 	constructor(
 		private readonly app: App,
@@ -26,6 +30,7 @@ export class ButtonStudioModal {
 	) {
 		this.draft = structuredClone(button);
 		this.lastCommittedState = JSON.stringify(this.draft);
+		this.hasPersistedState = this.options.initiallyPersisted !== false;
 	}
 
 	open = (): void => {
@@ -51,6 +56,7 @@ export class ButtonStudioModal {
 							onEditButton: (button, index) => {
 								this.openGroupButtonEditor(button, index);
 							},
+							onAddButton: () => this.openNewGroupButtonEditor(),
 						},
 					);
 				} else {
@@ -76,7 +82,7 @@ export class ButtonStudioModal {
 		this.modal.open();
 	};
 
-	private async commitChanges(): Promise<void> {
+	private async commitChanges(): Promise<boolean> {
 		const nextButton = structuredClone(this.draft);
 		nextButton.groupItems = nextButton.groupItems.map((groupItem) => ({
 			...groupItem,
@@ -84,13 +90,18 @@ export class ButtonStudioModal {
 			groupItems: [],
 		}));
 		const nextState = JSON.stringify(nextButton);
-		if (nextState === this.lastCommittedState) return;
+		if (nextState === this.lastCommittedState) return this.hasPersistedState;
 
 		try {
-			await this.options.onChange(nextButton);
-			this.lastCommittedState = nextState;
+			const persisted = await this.options.onChange(nextButton);
+			if (persisted) {
+				this.lastCommittedState = nextState;
+				this.hasPersistedState = true;
+			}
+			return persisted;
 		} catch (error) {
 			console.error('Custom Buttons failed to save button changes:', error);
+			return false;
 		}
 	}
 
@@ -99,7 +110,13 @@ export class ButtonStudioModal {
 		this.panel = null;
 		this.iconService?.destroy();
 		this.iconService = null;
-		await this.commitChanges();
+		const persisted = await this.commitChanges();
+		if (!persisted) {
+			const itemName = this.draft.kind === 'group' ? '按钮组' : '按钮';
+			new Notice(this.hasPersistedState
+				? `${itemName}必填信息不完整, 本次修改未保存`
+				: `${itemName}必填信息不完整, 未创建${itemName}`);
+		}
 		this.modal = null;
 		this.options.onClose?.();
 	}
@@ -108,11 +125,38 @@ export class ButtonStudioModal {
 		new ButtonStudioModal(this.app, button, {
 			customIconsIntegration: this.options.customIconsIntegration,
 			onChange: async (savedButton) => {
+				if (!isButtonConfigurationComplete(savedButton)) return false;
 				const currentIndex = this.draft.groupItems.indexOf(button);
 				const targetIndex = currentIndex >= 0 ? currentIndex : index;
-				if (!this.draft.groupItems[targetIndex]) return;
+				if (!this.draft.groupItems[targetIndex]) return false;
 				this.draft.groupItems[targetIndex] = savedButton;
-				await this.commitChanges();
+				return this.commitChanges();
+			},
+			onClose: () => {
+				if (this.panel instanceof ButtonGroupPanel) {
+					this.panel.refreshItems();
+				}
+			},
+		}).open();
+	}
+
+	private openNewGroupButtonEditor(): void {
+		const draft = createCustomButton();
+		let savedIndex: number | null = null;
+		new ButtonStudioModal(this.app, draft, {
+			customIconsIntegration: this.options.customIconsIntegration,
+			initiallyPersisted: false,
+			onChange: async (savedButton) => {
+				if (!isButtonConfigurationComplete(savedButton)) return false;
+				if (savedIndex === null) {
+					savedIndex = this.draft.groupItems.length;
+					this.draft.groupItems.push(savedButton);
+				} else if (this.draft.groupItems[savedIndex]) {
+					this.draft.groupItems[savedIndex] = savedButton;
+				} else {
+					return false;
+				}
+				return this.commitChanges();
 			},
 			onClose: () => {
 				if (this.panel instanceof ButtonGroupPanel) {

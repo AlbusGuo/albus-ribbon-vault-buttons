@@ -40,7 +40,7 @@ export function createCustomButton(): CustomButton {
 		kind: 'button',
 		icon: 'plus',
 		toggleIcon: 'plus',
-		tooltip: '新按钮',
+		tooltip: '',
 		type: 'command',
 		command: '',
 		file: '',
@@ -56,7 +56,7 @@ export function createButtonGroup(): CustomButton {
 	return {
 		...createCustomButton(),
 		kind: 'group',
-		tooltip: '新按钮组',
+		tooltip: '',
 		groupItems: [],
 	};
 }
@@ -140,7 +140,7 @@ function validateAndCleanSettings(settings: RibbonVaultButtonsSettings): RibbonV
 			kind: normalizedKind,
 			icon: normalizeIconName(candidate.icon),
 			toggleIcon: normalizeIconName(candidate.toggleIcon || candidate.icon),
-			tooltip: typeof candidate.tooltip === 'string' ? candidate.tooltip : '未命名按钮',
+			tooltip: typeof candidate.tooltip === 'string' ? candidate.tooltip : '',
 			type: normalizedType,
 			command: rawType === 'command-group'
 				? legacyCommands[0] ?? ''
