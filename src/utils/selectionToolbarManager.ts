@@ -34,6 +34,7 @@ export class SelectionToolbarManager {
 	private positionFrameWindow: Window | null = null;
 	private showOnKeyboard = false;
 	private readonly trackedDocuments = new Map<Document, TrackedDocument>();
+	private accessibleLabelSequence = 0;
 
 	constructor(
 		private readonly app: App,
@@ -266,9 +267,15 @@ export class SelectionToolbarManager {
 			return this.toolbarEl;
 		}
 
+		const labelId = `basic-vault-selection-toolbar-label-${++this.accessibleLabelSequence}`;
 		const toolbarEl = hostEl.createDiv({
 			cls: 'basic-vault-selection-toolbar',
-			attr: { role: 'toolbar', 'aria-label': '选中文本工具栏' },
+			attr: { role: 'toolbar', 'aria-labelledby': labelId },
+		});
+		toolbarEl.createSpan({
+			cls: 'basic-vault-toolbar-accessible-label',
+			text: '选中文本工具栏',
+			attr: { id: labelId },
 		});
 		const actionsEl = toolbarEl.createDiv({ cls: 'basic-vault-content-toolbar-actions' });
 		this.items.forEach((item, index) => {

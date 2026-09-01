@@ -1,5 +1,17 @@
 /* 笔记工具栏和选中文本工具栏 */
 
+.basic-vault-toolbar-accessible-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .basic-vault-note-toolbar {
   box-sizing: border-box;
   display: flex;
@@ -78,6 +90,38 @@
   height: 18px;
   margin: 0 4px;
   background-color: var(--background-modifier-border);
+}
+
+.basic-vault-note-toolbar-divider {
+  position: relative;
+  flex-basis: 12px;
+  width: 12px;
+  height: 28px;
+  margin: 0;
+  background-color: transparent;
+}
+
+.basic-vault-note-toolbar-divider::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 50%;
+  width: 1px;
+  background-color: var(--background-modifier-border);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.basic-vault-note-toolbar-divider:hover,
+.basic-vault-note-toolbar-divider.is-pointer-dragging {
+  background-color: var(--background-modifier-hover);
+  border-radius: var(--clickable-icon-radius);
+}
+
+.basic-vault-note-toolbar-divider:hover::before,
+.basic-vault-note-toolbar-divider.is-pointer-dragging::before {
+  background-color: var(--icon-color-hover);
 }
 
 .basic-vault-selection-toolbar {

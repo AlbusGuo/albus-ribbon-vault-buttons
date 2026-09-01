@@ -18,6 +18,7 @@ export class NoteToolbarManager {
 	private readonly toolbarByView = new WeakMap<MarkdownView, HTMLElement>();
 	private readonly alignmentFrames = new Map<number, Window>();
 	private readonly sortControllers = new Map<HTMLElement, PointerSortController>();
+	private accessibleLabelSequence = 0;
 
 	constructor(
 		private readonly app: App,
@@ -73,9 +74,15 @@ export class NoteToolbarManager {
 			this.containers.delete(existing);
 		}
 
+		const labelId = `basic-vault-note-toolbar-label-${++this.accessibleLabelSequence}`;
 		const toolbarEl = view.containerEl.createDiv({
 			cls: `basic-vault-note-toolbar is-${position}`,
-			attr: { role: 'toolbar', 'aria-label': '笔记工具栏' },
+			attr: { role: 'toolbar', 'aria-labelledby': labelId },
+		});
+		toolbarEl.createSpan({
+			cls: 'basic-vault-toolbar-accessible-label',
+			text: '笔记工具栏',
+			attr: { id: labelId },
 		});
 		toolbarEl.dataset.position = position;
 		const actionsEl = toolbarEl.createDiv({ cls: 'basic-vault-content-toolbar-actions' });
@@ -83,7 +90,10 @@ export class NoteToolbarManager {
 		items.forEach((item, index) => {
 			if (item.type === 'divider') {
 				const dividerEl = actionsEl.createDiv({
-					cls: 'basic-vault-content-toolbar-divider',
+					cls: [
+						'basic-vault-content-toolbar-divider',
+						'basic-vault-note-toolbar-divider',
+					],
 					attr: { role: 'separator' },
 				});
 				sortableItems.push({ key: item.id, element: dividerEl });

@@ -1,4 +1,4 @@
-import { App, ItemView, TFile, WorkspaceLeaf, normalizePath, setIcon, setTooltip } from 'obsidian';
+import { App, ItemView, TFile, WorkspaceLeaf, normalizePath, setIcon } from 'obsidian';
 import { ButtonGroupTrigger, CustomButton, ButtonItem, DividerItem } from '../types';
 import { PointerSortController, PointerSortItem } from './pointerSortController';
 import { MorphIconManager } from './morphIconManager';
@@ -246,9 +246,11 @@ export class ButtonManager {
 			: button.icon;
 		const buttonEl = parentEl.createEl('button', {
 			cls: ['clickable-icon', 'basic-vault-content-toolbar-button'],
-			attr: { type: 'button', 'aria-label': button.tooltip },
+			attr: {
+				type: 'button',
+				'data-basic-vault-accessible-label': button.tooltip,
+			},
 		});
-		setTooltip(buttonEl, button.tooltip);
 		if (area === 'selection') {
 			buttonEl.addEventListener('pointerdown', (event) => event.preventDefault());
 		}
@@ -339,13 +341,29 @@ export class ButtonManager {
 	 */
 	private setButtonIcon(buttonEl: HTMLElement, iconName: string): void {
 		this.morphIconManager.resetElement(buttonEl);
-		if (this.renderIntegratedIcon(buttonEl, iconName)) return;
-		try {
-			setIcon(buttonEl, iconName);
-			if (!buttonEl.querySelector('svg')) setIcon(buttonEl, 'help-circle');
-		} catch {
-			setIcon(buttonEl, 'help-circle');
+		for (const labelEl of Array.from(buttonEl.querySelectorAll(
+			':scope > .basic-vault-toolbar-accessible-label',
+		))) {
+			labelEl.remove();
 		}
+		if (!this.renderIntegratedIcon(buttonEl, iconName)) {
+			try {
+				setIcon(buttonEl, iconName);
+				if (!buttonEl.querySelector('svg')) setIcon(buttonEl, 'help-circle');
+			} catch {
+				setIcon(buttonEl, 'help-circle');
+			}
+		}
+		this.appendAccessibleButtonLabel(buttonEl);
+	}
+
+	private appendAccessibleButtonLabel(buttonEl: HTMLElement): void {
+		const label = buttonEl.dataset.basicVaultAccessibleLabel;
+		if (!label) return;
+		buttonEl.createSpan({
+			cls: 'basic-vault-toolbar-accessible-label',
+			text: label,
+		});
 	}
 
 	/**
