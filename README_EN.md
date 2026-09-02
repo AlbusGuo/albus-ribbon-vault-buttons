@@ -6,7 +6,7 @@ Custom Buttons is a desktop plugin for [Obsidian](https://obsidian.md/) that pro
 
 *Keep your most-used actions within reach.*
 
-Buttons can run Obsidian commands, open files in the vault, or visit web links. The plugin provides a ribbon area, page header buttons, a note toolbar, and a selection toolbar, with support for dividers, button groups, icon toggles, and optional Custom Icons integration.
+Buttons can run Obsidian commands, open files in the vault, or visit web links. The plugin provides a ribbon area, page header buttons, a note toolbar, and a selection toolbar, with support for dividers, button groups, and icon toggles.
 
 ## Features
 
@@ -39,8 +39,7 @@ A button group has its own name and parent icon. Click or hover over the parent 
 - Pick from Obsidian's built-in Lucide icons.
 - Assign separate primary and toggle icons to each regular button.
 - Icon state is persisted across Obsidian reloads.
-- Compatible icon paths morph with [Morphicons](https://github.com/thesephist/morphicons).
-- When [Custom Icons](https://github.com/AlbusGuo/albus-custom-icons) is installed, the icon picker automatically uses its public API. Otherwise, it falls back to the default picker.
+- Compatible icon paths morph with [Morphicons](https://github.com/guillermolg00/morphicons).
 
 ### Sorting and dividers
 
@@ -119,18 +118,18 @@ Network access occurs only when you explicitly open a URL button.
 
 - Some commands depend on the active editor or view. Their behavior is controlled by the command provider.
 - Button groups support one level only. Child buttons cannot contain another button group.
-- Custom Icons is an optional integration and must be installed and enabled separately.
 
 ## Acknowledgments
 
-- [Note Toolbar](https://github.com/chrisgurney/obsidian-note-toolbar) by [Chris Gurney](https://github.com/chrisgurney): Its note and selection toolbar concepts and interactions were an important reference for this project.
+- [Note Toolbar](https://github.com/chrisgurney/obsidian-note-toolbar) by [Chris Gurney](https://github.com/chrisgurney): Its note and selection toolbar concepts and interactions were an important reference for this project. Note Toolbar is distributed under GPL-3.0; the complete upstream license is included in [NOTE_TOOLBAR_LICENSE](NOTE_TOOLBAR_LICENSE).
 - [Commander](https://github.com/phibr0/obsidian-commander) by [phibr0](https://github.com/phibr0): Its approach to organizing and running custom actions across Obsidian interface locations was an important inspiration.
 - [Home Tab Plus](https://github.com/Moyf/home-tab-plus) by [Moyf](https://github.com/Moyf): Its README structure and project presentation inspired this documentation rewrite.
-- [Morphicons](https://github.com/thesephist/morphicons): Provides icon path morphing.
-- [Custom Icons](https://github.com/AlbusGuo/albus-custom-icons): Provides the optional extended icon library and public icon picker API.
+- [Morphicons](https://github.com/guillermolg00/morphicons): Provides icon path morphing.
 
 Thanks to the Obsidian developer documentation, sample plugin, and the broader plugin development community.
 
 ## License
 
 This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+
+The portions informed by Note Toolbar also comply with its [GNU General Public License v3.0](NOTE_TOOLBAR_LICENSE). The combination of GPL-3.0 and AGPL-3.0 is governed by section 13 of AGPL-3.0.

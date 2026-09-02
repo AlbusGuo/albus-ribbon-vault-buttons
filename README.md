@@ -6,7 +6,7 @@ Custom Buttons 是一个 [Obsidian](https://obsidian.md/) 桌面端插件, 用�
 
 *让常用操作始终触手可及.*
 
-按钮可以执行 Obsidian 命令, 打开库内文件或访问网页. 插件同时提供左侧边栏, 标题栏, 笔记工具栏与选中文本工具栏, 并支持分割线, 按钮组, 图标切换和可选的 Custom Icons 集成.
+按钮可以执行 Obsidian 命令, 打开库内文件或访问网页. 插件同时提供左侧边栏, 标题栏, 笔记工具栏与选中文本工具栏, 并支持分割线, 按钮组和图标切换.
 
 ## 功能
 
@@ -39,8 +39,7 @@ Custom Buttons 是一个 [Obsidian](https://obsidian.md/) 桌面端插件, 用�
 - 使用 Obsidian 内置 Lucide 图标选择器.
 - 每个普通按钮可分别设置主图标和切换图标.
 - 点击按钮后保存图标状态, 重新加载 Obsidian 后继续保持.
-- 兼容图标之间使用 [Morphicons](https://github.com/thesephist/morphicons) 进行路径变换.
-- 安装 [Custom Icons](https://github.com/AlbusGuo/albus-custom-icons) 后, 图标选择器会自动使用其公共 API. 未安装时自动回退到默认选择器.
+- 兼容图标之间使用 [Morphicons](https://github.com/guillermolg00/morphicons) 进行路径变换.
 
 ### 排序与分隔线
 
@@ -119,18 +118,18 @@ Custom Buttons 在本地运行, 不收集遥测数据, 不上传库内容, 也�
 
 - 部分命令依赖当前活动编辑器或视图, 实际行为由命令提供方决定.
 - 按钮组仅支持一层, 组内按钮不能继续嵌套按钮组.
-- Custom Icons 是可选集成, 需要单独安装并启用.
 
 ## 致谢
 
-- [Note Toolbar](https://github.com/chrisgurney/obsidian-note-toolbar) by [Chris Gurney](https://github.com/chrisgurney): 笔记工具栏与选中文本工具栏的功能构想和交互方式为本项目提供了重要参考.
+- [Note Toolbar](https://github.com/chrisgurney/obsidian-note-toolbar) by [Chris Gurney](https://github.com/chrisgurney): 笔记工具栏与选中文本工具栏的功能构想和交互方式为本项目提供了重要参考. Note Toolbar 基于 GPL-3.0 发布, 完整上游许可证见 [NOTE_TOOLBAR_LICENSE](NOTE_TOOLBAR_LICENSE).
 - [Commander](https://github.com/phibr0/obsidian-commander) by [phibr0](https://github.com/phibr0): 在 Obsidian 多个界面位置组织和执行自定义操作的设计为本项目提供了重要启发.
 - [Home Tab Plus](https://github.com/Moyf/home-tab-plus) by [Moyf](https://github.com/Moyf): README 的信息结构与项目说明方式为本次文档重写提供了参考.
-- [Morphicons](https://github.com/thesephist/morphicons): 提供图标路径变换能力.
-- [Custom Icons](https://github.com/AlbusGuo/albus-custom-icons): 提供可选的扩展图标库和公共图标选择 API.
+- [Morphicons](https://github.com/guillermolg00/morphicons): 提供图标路径变换能力.
 
 感谢 Obsidian 开发者文档, 示例插件和社区中的所有插件开发者.
 
 ## 许可
 
 本项目基于 [GNU Affero General Public License v3.0](LICENSE) 发布.
+
+本项目中参考 Note Toolbar 的相关实现同时遵守其 [GNU General Public License v3.0](NOTE_TOOLBAR_LICENSE). GPL-3.0 与 AGPL-3.0 的组合适用 AGPL-3.0 第 13 节规定.
