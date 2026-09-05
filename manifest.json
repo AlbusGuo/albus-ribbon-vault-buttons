@@ -1,7 +1,7 @@
 {
 	"id": "albus-custom-buttons",
 	"name": "Custom Buttons",
-	"version": "2.5.1",
+	"version": "2.5.2",
 	"minAppVersion": "1.12.0",
 	"description": "A plugin to customize the ribbon and page header with custom buttons, dividers, and SVG icon support.",
 	"author": "Albus",

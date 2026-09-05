@@ -73,7 +73,7 @@ export default class RibbonVaultButtonsPlugin extends Plugin {
 				),
 		);
 		this.selectionToolbarManager.register(this);
-		this.registerEditorExtension(this.selectionToolbarManager.createEditorExtension());
+		this.registerEditorExtension(this.selectionToolbarManager.getEditorExtension());
 
 		this.buttonManager.applyStyleSettings(this.settings.hideBuiltInButtons);
 		this.buttonManager.applyDefaultActionsStyle(this.settings.hideDefaultActions);

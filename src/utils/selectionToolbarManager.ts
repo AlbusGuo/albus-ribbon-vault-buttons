@@ -1,6 +1,9 @@
+import { StateEffect, type Extension } from '@codemirror/state';
 import { EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { App, Plugin } from 'obsidian';
 import { ButtonItem, CustomButton } from '../types';
+
+const REGISTER_EDITOR_VIEW_EVENT = 'albus-custom-buttons:register-editor-view';
 
 interface SelectionRect {
 	left: number;
@@ -34,28 +37,19 @@ export class SelectionToolbarManager {
 	private positionFrameWindow: Window | null = null;
 	private showOnKeyboard = false;
 	private readonly trackedDocuments = new Map<Document, TrackedDocument>();
+	private readonly managedEditorViews = new WeakSet<EditorView>();
+	private readonly externalEditorViews = new WeakSet<EditorView>();
+	private readonly selectionExtension: Extension;
 	private accessibleLabelSequence = 0;
 
 	constructor(
 		private readonly app: App,
 		private readonly renderButton: SelectionToolbarButtonRenderer,
-	) {}
-
-	register(plugin: Plugin): void {
-		const ownerDocument = plugin.app.workspace.containerEl.ownerDocument;
-		this.trackDocument(ownerDocument, true);
-		plugin.register(() => this.clearTrackedDocuments());
-		plugin.registerEvent(this.app.workspace.on('active-leaf-change', () => {
-			this.selectionFromKeyboard = true;
-			this.hide();
-		}));
-	}
-
-	createEditorExtension() {
+	) {
 		const editorCreated = (view: EditorView) => this.editorCreated(view);
 		const editorUpdated = (view: EditorView) => this.updateEditorSelection(view);
 		const editorDestroyed = (view: EditorView) => this.editorDestroyed(view);
-		return ViewPlugin.fromClass(class {
+		this.selectionExtension = ViewPlugin.fromClass(class {
 			constructor(private readonly view: EditorView) {
 				editorCreated(view);
 				editorUpdated(view);
@@ -71,6 +65,20 @@ export class SelectionToolbarManager {
 				editorDestroyed(this.view);
 			}
 		});
+	}
+
+	register(plugin: Plugin): void {
+		const ownerDocument = plugin.app.workspace.containerEl.ownerDocument;
+		this.trackDocument(ownerDocument, true);
+		plugin.register(() => this.clearTrackedDocuments());
+		plugin.registerEvent(this.app.workspace.on('active-leaf-change', () => {
+			this.selectionFromKeyboard = true;
+			this.hide();
+		}));
+	}
+
+	getEditorExtension(): Extension {
+		return this.selectionExtension;
 	}
 
 	setItems(
@@ -149,6 +157,49 @@ export class SelectionToolbarManager {
 		this.hide();
 	};
 
+	private readonly handleRegisterEditorView = (event: Event): void => {
+		const ownerDocument = event.currentTarget as Document | null;
+		if (!ownerDocument || !this.trackedDocuments.has(ownerDocument)) return;
+		const ownerWindow = ownerDocument.defaultView;
+		const target = event.target;
+		if (
+			!ownerWindow ||
+			!(target instanceof ownerWindow.Element) ||
+			target.ownerDocument !== ownerDocument
+		) {
+			return;
+		}
+
+		const editorElement = target.closest<HTMLElement>('.cm-editor');
+		if (
+			!editorElement?.isConnected ||
+			editorElement.ownerDocument !== ownerDocument
+		) {
+			return;
+		}
+
+		const view = EditorView.findFromDOM(editorElement);
+		if (
+			!view ||
+			view.dom !== editorElement ||
+			!view.dom.isConnected ||
+			view.dom.ownerDocument !== ownerDocument ||
+			this.managedEditorViews.has(view) ||
+			this.externalEditorViews.has(view)
+		) {
+			return;
+		}
+
+		try {
+			view.dispatch({
+				effects: StateEffect.appendConfig.of(this.selectionExtension),
+			});
+			this.externalEditorViews.add(view);
+		} catch {
+			// The view may have been destroyed between validation and dispatch.
+		}
+	};
+
 	private updateEditorSelection(view: EditorView): void {
 		if (!this.enabled) return;
 		if (this.pointerDown) {
@@ -211,6 +262,8 @@ export class SelectionToolbarManager {
 	private editorDestroyed(view: EditorView): void {
 		if (this.ownerEditorView === view) this.hide();
 		if (this.pendingEditorView === view) this.pendingEditorView = null;
+		this.managedEditorViews.delete(view);
+		this.externalEditorViews.delete(view);
 		this.releaseDocument(view.dom.ownerDocument);
 	}
 
@@ -306,6 +359,7 @@ export class SelectionToolbarManager {
 	}
 
 	private editorCreated(view: EditorView): void {
+		this.managedEditorViews.add(view);
 		this.trackDocument(view.dom.ownerDocument);
 	}
 
@@ -322,10 +376,31 @@ export class SelectionToolbarManager {
 		const AbortControllerConstructor = ownerDocument.defaultView?.AbortController ?? AbortController;
 		const abortController = new AbortControllerConstructor();
 		const options = { signal: abortController.signal };
-		ownerDocument.addEventListener('pointerdown', this.handlePointerDown, options);
-		ownerDocument.addEventListener('pointerup', this.handlePointerUp, options);
-		ownerDocument.addEventListener('pointercancel', this.handlePointerCancel, options);
+		const pointerOptions = {
+			capture: true,
+			signal: abortController.signal,
+		};
+		ownerDocument.addEventListener(
+			'pointerdown',
+			this.handlePointerDown,
+			pointerOptions,
+		);
+		ownerDocument.addEventListener(
+			'pointerup',
+			this.handlePointerUp,
+			pointerOptions,
+		);
+		ownerDocument.addEventListener(
+			'pointercancel',
+			this.handlePointerCancel,
+			pointerOptions,
+		);
 		ownerDocument.addEventListener('keydown', this.handleKeyDown, options);
+		ownerDocument.addEventListener(
+			REGISTER_EDITOR_VIEW_EVENT,
+			this.handleRegisterEditorView,
+			options,
+		);
 		ownerDocument.addEventListener('scroll', this.handleViewportChange, {
 			capture: true,
 			signal: abortController.signal,
